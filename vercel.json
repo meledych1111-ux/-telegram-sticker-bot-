@@ -20,7 +20,4 @@
       "dest": "/public/$1"
     }
   ],
-  "env": {
-    "BOT_TOKEN": "@bot-token"
-  }
-}
+  
