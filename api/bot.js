@@ -16,7 +16,9 @@ module.exports = async (req, res) => {
   if (req.method === 'GET') {
     return res.status(200).json({
       status: '✅ Бот работает!',
-      message: 'Найдите бота в Telegram и отправьте изображение'
+      message: 'Найдите бота в Telegram и отправьте изображение',
+      bot_username: '@MyStickerMakertBot',
+      api_endpoint: '/api/bot'
     });
   }
 
@@ -26,8 +28,8 @@ module.exports = async (req, res) => {
       await processMessage(req.body);
       return res.status(200).json({ status: 'ok' });
     } catch (error) {
-      console.error('❌ Ошибка:', error);
-      return res.status(200).json({ status: 'error' });
+      console.error('❌ Ошибка в api/bot.js:', error);
+      return res.status(200).json({ status: 'error', error: error.message });
     }
   }
 
