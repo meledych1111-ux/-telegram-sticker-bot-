@@ -6,21 +6,18 @@ let isInitialized = false;
 
 async function initializeBot() {
   if (isInitialized) return;
-
   console.log('🤖  Инициализация Telegram-бота...');
   try {
     await initializeDatabase();
     console.log('✅  Бот инициализирован и готов к работе!');
   } catch (error) {
     console.error('❌  Ошибка инициализации бота:', error);
-    // не падаем, чтобы Vercel не убил функцию
   } finally {
     isInitialized = true;
   }
 }
 
-// запускаем сразу
-initializeBot();
+initializeBot();   // холодный старт
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -28,6 +25,17 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  if (req.method === 'GET' && req.url === '/health') {
+    const { getUserStats, getUserCount } = require('../lib/database');
+    const stats = await getUserStats(0);
+    return res.status(200).json({
+      status: 'ok',
+      db: true,
+      totalStickers: stats.total,
+      totalUsers: await getUserCount()
+    });
+  }
 
   if (req.method === 'GET') {
     return res.status(200).json({
