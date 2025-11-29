@@ -10,7 +10,6 @@
     "webhook-delete": "node scripts/setupWebhook.js delete",
     "update-db": "node scripts/updateDatabase.js",
     "db-check": "node scripts/updateDatabase.js check",
-    "db-reset": "node scripts/updateDatabase.js reset",
     "deploy": "vercel --prod",
     "deploy-prod": "vercel --prod"
   },
