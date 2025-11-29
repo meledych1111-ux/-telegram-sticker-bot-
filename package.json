@@ -1,24 +1,49 @@
 {
   "name": "telegram-sticker-bot",
-  "version": "1.0.0",
-  "description": "Telegram bot for creating stickers with effects, collections and favorites",
+  "version": "1.1.0",
+  "description": "Telegram bot for creating stickers with effects, collections and favorites (Vercel serverless)",
+  "type": "module",
   "main": "api/bot.js",
   "scripts": {
     "dev": "vercel dev",
-    "webhook-status": "node scripts/setupWebhook.js status",
-    "webhook-setup": "node scripts/setupWebhook.js",
-    "webhook-delete": "node scripts/setupWebhook.js delete",
-    "update-db": "node scripts/updateDatabase.js",
-    "db-check": "node scripts/updateDatabase.js check",
-    "deploy": "vercel --prod"
+    "deploy": "vercel --prod",
+
+    "db-init": "node scripts/dbInit.js",
+    "db-migrate": "node scripts/dbMigrate.js",
+
+    "webhook:status": "node scripts/webhook.js status",
+    "webhook:set": "node scripts/webhook.js set",
+    "webhook:delete": "node scripts/webhook.js delete"
   },
   "dependencies": {
-    "axios": "^1.6.0",
-    "sharp": "^0.32.0",
-    "postgres": "^3.4.3"
+    "axios": "1.6.8",
+    "sharp": "0.33.2",
+    "postgres": "3.4.3",
+    "form-data": "4.0.0"
   },
-  "engines": { "node": ">=18" },
-  "keywords": ["telegram", "bot", "sticker", "image-processing", "vercel"],
-  "author": "You",
+  "engines": {
+    "node": ">=18"
+  },
+  "vercel": {
+    "functions": {
+      "api/bot.js": {
+        "memory": 1024,
+        "maxDuration": 30
+      },
+      "api/files/*.js": {
+        "memory": 1024,
+        "maxDuration": 15
+      }
+    }
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "stickers",
+    "sharp",
+    "image-processing",
+    "vercel",
+    "serverless"
+  ],
   "license": "MIT"
 }
