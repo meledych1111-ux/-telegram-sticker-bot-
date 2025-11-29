@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vercel dev",
     "setup-webhook": "node scripts/setupWebhook.js",
+    "webhook-status": "node scripts/setupWebhook.js status",
+    "webhook-delete": "node scripts/setupWebhook.js delete",
     "update-db": "node scripts/updateDatabase.js",
-    "deploy": "vercel --prod"
+    "deploy": "vercel --prod",
+    "deploy-prod": "vercel --prod"
   },
   "dependencies": {
     "axios": "^1.6.0",
@@ -16,5 +19,14 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "sticker",
+    "image-processing",
+    "vercel"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }
