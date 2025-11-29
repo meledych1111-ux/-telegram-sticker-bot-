@@ -18,13 +18,14 @@ module.exports = async (req, res) => {
       status: '✅ Бот работает!',
       message: 'Найдите бота в Telegram и отправьте изображение',
       bot_username: '@MyStickerMakertBot',
-      api_endpoint: '/api/bot'
+      timestamp: new Date().toISOString()
     });
   }
 
   // POST запрос - сообщение от Telegram
   if (req.method === 'POST') {
     try {
+      console.log('📨 Получено сообщение от Telegram');
       await processMessage(req.body);
       return res.status(200).json({ status: 'ok' });
     } catch (error) {
