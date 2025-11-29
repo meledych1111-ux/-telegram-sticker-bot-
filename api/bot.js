@@ -1,5 +1,31 @@
-// ⚡ ГЛАВНЫЙ ФАЙЛ - обрабатывает все запросы к боту
+// ⚡ ГЛАВНЫЙ ФАЙЛ С АВТО-ИНИЦИАЛИЗАЦИЕЙ
 const { processMessage } = require('../lib/telegramAPI');
+const { initializeDatabase } = require('../lib/database');
+
+// 🚀 АВТОМАТИЧЕСКАЯ ИНИЦИАЛИЗАЦИЯ ПРИ ЗАПУСКЕ
+let isInitialized = false;
+
+async function initializeBot() {
+  if (isInitialized) return;
+  
+  console.log('🤖 Инициализация Telegram бота...');
+  
+  try {
+    // Инициализируем базу данных
+    await initializeDatabase();
+    
+    console.log('✅ Бот инициализирован и готов к работе!');
+    isInitialized = true;
+    
+  } catch (error) {
+    console.error('❌ Ошибка инициализации бота:', error);
+    // Продолжаем работу даже при ошибке инициализации
+    isInitialized = true;
+  }
+}
+
+// Запускаем инициализацию сразу
+initializeBot();
 
 module.exports = async (req, res) => {
   // Разрешаем все типы запросов
@@ -18,6 +44,7 @@ module.exports = async (req, res) => {
       status: '✅ Бот работает!',
       message: 'Найдите бота в Telegram и отправьте изображение',
       bot_username: '@MyStickerMakertBot',
+      database_initialized: isInitialized,
       timestamp: new Date().toISOString()
     });
   }
@@ -26,6 +53,13 @@ module.exports = async (req, res) => {
   if (req.method === 'POST') {
     try {
       console.log('📨 Получено сообщение от Telegram');
+      
+      // Ждем инициализацию если еще не завершена
+      if (!isInitialized) {
+        console.log('⏳ Ожидаю инициализацию...');
+        await initializeBot();
+      }
+      
       await processMessage(req.body);
       return res.status(200).json({ status: 'ok' });
     } catch (error) {
