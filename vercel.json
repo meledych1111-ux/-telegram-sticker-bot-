@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/**/*.js",
+      "src": "api/bot.js",
       "use": "@vercel/node"
     },
     {
@@ -17,10 +17,6 @@
       "methods": ["GET", "POST", "OPTIONS"]
     },
     {
-      "src": "/api/(.*)",
-      "dest": "/api/bot.js"
-    },
-    {
       "src": "/",
       "dest": "/public/index.html"
     },
@@ -28,14 +24,5 @@
       "src": "/(.*)",
       "dest": "/public/$1"
     }
-  ],
-  "functions": {
-    "api/bot.js": {
-      "maxDuration": 30,
-      "memory": 1024
-    }
-  },
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
