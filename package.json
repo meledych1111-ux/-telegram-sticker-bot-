@@ -3,10 +3,11 @@
   "version": "2.0.0",
   "description": "Telegram Sticker Bot with beautiful menus",
   "main": "api/bot.js",
-  "type": "commonjs",  
+  "type": "commonjs",
   "scripts": {
     "start": "node api/bot.js",
-    "dev": "node --watch api/bot.js"
+    "dev": "node api/bot.js",
+    "test": "echo \"No tests specified\" && exit 0"
   },
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0",
@@ -24,6 +25,6 @@
     "vercel",
     "neon"
   ],
-  "author": "Your Name",
+  "author": "",
   "license": "MIT"
 }
