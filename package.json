@@ -1,19 +1,28 @@
 {
   "name": "telegram-sticker-bot",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Telegram Sticker Bot with beautiful menus",
   "main": "api/bot.js",
   "scripts": {
     "start": "node api/bot.js",
-    "dev": "node api/bot.js"
+    "dev": "node --watch api/bot.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.61.0",
+    "node-telegram-bot-api": "^0.64.0",
     "pg": "^8.11.3",
-    "jimp": "^0.22.10",
-    "express": "^4.18.2"
+    "jimp": "^0.22.12",
+    "express": "^4.18.3"
   },
   "engines": {
     "node": "24.x"
-  }
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "sticker",
+    "vercel",
+    "neon"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }
