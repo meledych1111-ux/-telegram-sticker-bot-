@@ -1,12 +1,15 @@
 {
-  "name": "telegram-sticker-bot",
-  "version": "1.0.0",
-  "description": "Telegram Sticker Bot with Node.js 24 + Neon",
+  "name": "telegram-sticker-bot-pro",
+  "version": "5.0.0",
+  "description": "Telegram Sticker Bot with all features",
   "main": "api/bot.js",
   "scripts": {
     "start": "node api/bot.js",
     "dev": "node dev.js",
-    "vercel-build": "npm install"
+    "setup-webhook": "node scripts/setup-webhook.js",
+    "db:init": "node -e \"require('./lib/database.js').initDatabase()\"",
+    "vercel-build": "npm install",
+    "test": "echo \"No tests yet\""
   },
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0",
@@ -14,10 +17,19 @@
     "sharp": "^0.33.4",
     "axios": "^1.6.8",
     "pg": "^8.11.3",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "uuid": "^9.0.1"
   },
   "engines": {
     "node": "24.x",
     "npm": "10.x"
-  }
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "sticker",
+    "vercel",
+    "neon",
+    "nodejs"
+  ]
 }
