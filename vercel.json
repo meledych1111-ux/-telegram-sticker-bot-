@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "api/bot.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "nodeVersion": "24.x"
+      }
     }
   ],
   "routes": [
@@ -21,13 +24,11 @@
       "dest": "/api/bot.js"
     }
   ],
-  "env": {
-    "NODE_ENV": "production"
-  },
   "functions": {
     "api/bot.js": {
       "maxDuration": 30,
-      "memory": 1024
+      "memory": 1024,
+      "runtime": "nodejs24.x"
     }
   }
 }
