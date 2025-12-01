@@ -1,6 +1,6 @@
 {
   "name": "telegram-sticker-bot",
-  "version": "2.0.0",
+  "version": "4.0.0",
   "description": "Telegram Sticker Bot with beautiful menus",
   "main": "api/bot.js",
   "type": "commonjs",
