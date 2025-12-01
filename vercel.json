@@ -3,15 +3,24 @@
   "builds": [
     {
       "src": "api/bot.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "nodeVersion": "24.x"
+      }
     },
     {
       "src": "api/check-env.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "nodeVersion": "24.x"
+      }
     },
     {
       "src": "api/version.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "nodeVersion": "24.x"
+      }
     }
   ],
   "routes": [
@@ -55,8 +64,5 @@
       "memory": 512,
       "runtime": "nodejs24.x"
     }
-  },
-  "env": {
-    "NODE_ENV": "production"
   }
 }
