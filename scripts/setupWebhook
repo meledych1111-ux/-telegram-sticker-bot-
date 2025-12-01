@@ -1,274 +1,64 @@
-#!/usr/bin/env node
+// 🔗 НАСТРОЙКА ВЕБХУКА ДЛЯ TELEGRAM
 
-import TelegramBot from 'node-telegram-bot-api';
-import dotenv from 'dotenv';
-
-// Загружаем переменные окружения
-dotenv.config();
-
-// Проверка токена (простая реализация, чтобы не импортировать utils)
-function validateBotToken(token) {
-  const tokenRegex = /^\d{9,11}:[A-Za-z0-9_-]{35}$/;
-  return tokenRegex.test(token);
-}
-
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const VERCEL_URL = process.env.VERCEL_URL || 'https://telegram-sticker-bot.vercel.app';
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'sticker-bot-secret-' + Date.now();
-const WEBHOOK_URL = `${VERCEL_URL}/api/bot?secret=${WEBHOOK_SECRET}`;
-
-if (!BOT_TOKEN) {
-  console.error('❌ Ошибка: TELEGRAM_BOT_TOKEN не найден в переменных окружения');
-  console.log('\n📝 Установите токен:');
-  console.log('1. Получите токен у @BotFather');
-  console.log('2. Добавьте в .env файл или переменные окружения Vercel');
-  console.log('3. Формат: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz');
-  console.log('');
-  console.log('📁 Файл .env.example:');
-  console.log('TELEGRAM_BOT_TOKEN=your_bot_token_here');
-  console.log('VERCEL_URL=https://your-project.vercel.app');
-  console.log('WEBHOOK_SECRET=your_secret_here');
-  process.exit(1);
-}
-
-if (!validateBotToken(BOT_TOKEN)) {
-  console.error('❌ Неверный формат токена Telegram Bot');
-  console.log('Токен должен быть вида: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz');
-  console.log('Ваш токен (первые 20 символов):', BOT_TOKEN.substring(0, 20) + '...');
-  process.exit(1);
-}
+const axios = require('axios');
 
 async function setupWebhook() {
-  console.log('🔧 ====== НАСТРОЙКА WEBHOOK ======\n');
-  console.log(`🌐 Vercel URL: ${VERCEL_URL}`);
-  console.log(`🔗 Webhook URL: ${WEBHOOK_URL}`);
-  console.log(`🔑 Secret: ${WEBHOOK_SECRET}`);
-  console.log(`⚡ Node.js: ${process.version}`);
-  console.log(`📅 Время: ${new Date().toLocaleString('ru-RU')}\n`);
-  
-  try {
-    // Инициализация бота
-    const bot = new TelegramBot(BOT_TOKEN, {
-      polling: false,
-      request: {
-        timeout: 10000,
-        agentOptions: {
-          keepAlive: true,
-          maxSockets: 50
-        }
-      }
-    });
-    
-    // Проверяем токен и получаем информацию о боте
-    console.log('🔄 Проверка подключения к Telegram API...');
-    const botInfo = await bot.getMe();
-    console.log(`✅ Бот найден: @${botInfo.username} (${botInfo.first_name})`);
-    console.log(`🆔 ID бота: ${botInfo.id}`);
-    console.log(`🔗 Ссылка: https://t.me/${botInfo.username}`);
-    
-    // Получаем текущую информацию о вебхуке
-    console.log('\n📊 Получение информации о текущем вебхуке...');
-    const currentWebhook = await bot.getWebHookInfo();
-    
-    console.log('📋 Текущий вебхук:');
-    console.log(`  URL: ${currentWebhook.url || 'Не установлен'}`);
-    console.log(`  Ошибок в очереди: ${currentWebhook.pending_update_count || 0}`);
-    
-    if (currentWebhook.last_error_date) {
-      const errorDate = new Date(currentWebhook.last_error_date * 1000);
-      console.log(`  Последняя ошибка: ${errorDate.toLocaleString('ru-RU')}`);
-      console.log(`  Сообщение об ошибке: ${currentWebhook.last_error_message || 'Нет информации'}`);
-    }
-    
-    // Проверяем, совпадает ли текущий вебхук с нужным
-    if (currentWebhook.url === WEBHOOK_URL) {
-      console.log('\n✅ Вебхук уже настроен правильно!');
-      
-      // Проверяем работоспособность
-      try {
-        await bot.sendMessage(botInfo.id, 
-          `✅ Webhook проверка\n` +
-          `⏰ ${new Date().toLocaleString('ru-RU')}\n` +
-          `🌐 ${VERCEL_URL}\n` +
-          `⚡ Node.js ${process.version}`,
-          { parse_mode: 'HTML' }
-        );
-        console.log('📨 Тестовое сообщение отправлено боту');
-      } catch (testError) {
-        console.warn('⚠️  Не удалось отправить тестовое сообщение:', testError.message);
-      }
-      
-    } else {
-      // Устанавливаем новый вебхук
-      console.log('\n🔄 Установка нового вебхука...');
-      const result = await bot.setWebHook(WEBHOOK_URL, {
-        max_connections: 40,
-        allowed_updates: ['message', 'callback_query', 'chat_member']
-      });
-      
-      console.log('✅ Вебхук успешно установлен!');
-      console.log(`📋 Результат: ${result}`);
-      
-      // Проверяем установку
-      const newWebhook = await bot.getWebHookInfo();
-      console.log(`\n🔍 Проверка установки: ${newWebhook.url ? '✅ Успешно' : '❌ Ошибка'}`);
-      
-      if (newWebhook.url) {
-        console.log(`📊 Статус: Вебхук активен на ${newWebhook.url}`);
-      }
-    }
-    
-    // Устанавливаем команды бота
-    console.log('\n🔄 Настройка команд бота...');
-    await bot.setMyCommands([
-      { command: 'start', description: 'Запустить бота' },
-      { command: 'help', description: 'Справка и помощь' },
-      { command: 'status', description: 'Статус системы' },
-      { command: 'stats', description: 'Моя статистика' },
-      { command: 'effects', description: 'Доступные эффекты' }
-    ]);
-    console.log('✅ Команды настроены');
-    
-    // Устанавливаем описание бота
-    try {
-      await bot.setMyDescription({
-        description: '🤖 Бот для создания стикеров из фотографий\n' +
-                    '📸 Отправьте фото → Получите стикер!\n' +
-                    '✨ Эффекты, рамки, фильтры\n' +
-                    '⚡ Node.js 24 + Vercel'
-      });
-      console.log('📝 Описание бота обновлено');
-    } catch (descError) {
-      console.log('📝 Описание бота (можно установить в @BotFather)');
-    }
-    
-    console.log('\n🎉 ====== НАСТРОЙКА ЗАВЕРШЕНА ======');
-    console.log('');
-    console.log('📱 *Действия для проверки:*');
-    console.log(`1. Откройте Telegram: https://t.me/${botInfo.username}`);
-    console.log('2. Нажмите /start');
-    console.log('3. Отправьте фото для теста');
-    console.log('');
-    console.log('🔧 *Администрирование:*');
-    console.log(`• Проверить статус: ${VERCEL_URL}/api/health`);
-    console.log(`• Управление вебхуком: ${VERCEL_URL}/api/setup-webhook`);
-    console.log(`• Документация: ${VERCEL_URL}/`);
-    console.log('');
-    console.log('📊 *Мониторинг:*');
-    console.log('• Логи: vercel logs <project-name>');
-    console.log('• Переменные: Vercel Dashboard → Settings → Environment Variables');
-    console.log('=====================================');
-    
-    // Проверяем доступность API эндпоинтов
-    console.log('\n🔍 Проверка доступности API эндпоинтов...');
-    
-    const endpoints = [
-      { name: 'Health Check', url: `${VERCEL_URL}/api/health` },
-      { name: 'Webhook Setup', url: `${VERCEL_URL}/api/setup-webhook` }
-    ];
-    
-    for (const endpoint of endpoints) {
-      try {
-        const response = await fetch(endpoint.url);
-        console.log(`✅ ${endpoint.name}: ${response.status} ${response.statusText}`);
-      } catch (apiError) {
-        console.log(`❌ ${endpoint.name}: Недоступен - ${apiError.message}`);
-      }
-    }
-    
-    console.log('\n🚀 *Следующие шаги:*');
-    console.log('1. Проверьте бота в Telegram');
-    console.log('2. Отправьте тестовое фото');
-    console.log('3. Проверьте логи на ошибки');
-    console.log('4. Настройте базу данных (если нужно)');
-    console.log('');
-    
-    return {
-      success: true,
-      bot: {
-        username: botInfo.username,
-        name: botInfo.first_name,
-        id: botInfo.id,
-        link: `https://t.me/${botInfo.username}`
-      },
-      webhook: {
-        url: WEBHOOK_URL,
-        secret: WEBHOOK_SECRET,
-        status: 'configured'
-      },
-      endpoints: {
-        health: `${VERCEL_URL}/api/health`,
-        webhook: `${VERCEL_URL}/api/bot`,
-        dashboard: VERCEL_URL
-      },
-      system: {
-        node_version: process.version,
-        timestamp: new Date().toISOString()
-      }
-    };
-    
-  } catch (error) {
-    console.error(`\n❌ Ошибка настройки: ${error.message}`);
-    console.error(`📋 Детали:`, error.stack || 'Нет дополнительной информации');
-    
-    // Анализ ошибки
-    if (error.response) {
-      console.log(`\n🔍 Ответ Telegram API:`);
-      console.log(`Код: ${error.response.statusCode}`);
-      console.log(`Тело: ${JSON.stringify(error.response.body)}`);
-    }
-    
-    if (error.code === 'ETELEGRAM') {
-      console.log('\n⚠️  Проблема с Telegram API:');
-      console.log('1. Проверьте токен бота');
-      console.log('2. Убедитесь что бот не заблокирован');
-      console.log('3. Попробуйте создать нового бота в @BotFather');
-    }
-    
-    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-      console.log('\n🌐 Проблема с сетью:');
-      console.log('1. Проверьте интернет-соединение');
-      console.log('2. Убедитесь что VERCEL_URL доступен');
-      console.log('3. Проверьте DNS настройки');
-    }
-    
-    console.log('\n🔧 *Рекомендации по устранению:*');
-    console.log('1. Проверьте TELEGRAM_BOT_TOKEN в переменных окружения');
-    console.log('2. Убедитесь что бот создан и активен в @BotFather');
-    console.log('3. Проверьте что VERCEL_URL правильный и доступен');
-    console.log('4. Попробуйте запустить локально: npm run setup');
-    
+  // Получаем переменные из окружения
+  const BOT_TOKEN = process.env.BOT_TOKEN;
+  const VERCEL_URL = process.env.VERCEL_URL;
+
+  // Проверяем что переменные установлены
+  if (!BOT_TOKEN) {
+    console.error('❌ ОШИБКА: BOT_TOKEN не установлен');
+    console.log('💡 Решение: Установите переменную BOT_TOKEN в Vercel');
     process.exit(1);
+  }
+
+  if (!VERCEL_URL) {
+    console.error('❌ ОШИБКА: VERCEL_URL не установлен');
+    console.log('💡 Решение: Установите переменную VERCEL_URL в Vercel');
+    process.exit(1);
+  }
+
+  // URL для вебхука
+  const webhookUrl = `${VERCEL_URL}/api/bot`;
+
+  console.log('🔄 Настраиваю вебхук...');
+  console.log(`🤖 Бот: ${BOT_TOKEN.substring(0, 10)}...`);
+  console.log(`🌐 URL: ${webhookUrl}`);
+
+  try {
+    // Устанавливаем вебхук
+    const response = await axios.post(
+      `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`,
+      {
+        url: webhookUrl,
+        max_connections: 40,
+        allowed_updates: ['message']
+      }
+    );
+
+    // Проверяем результат
+    if (response.data.ok) {
+      console.log('✅ ВЕБХУК УСПЕШНО НАСТРОЕН!');
+      console.log(`📝 Вебхук установлен на: ${webhookUrl}`);
+    } else {
+      console.error('❌ Ошибка настройки вебхука:', response.data.description);
+    }
+
+  } catch (error) {
+    console.error('❌ Ошибка:', error.response?.data || error.message);
+    console.log('💡 Проверьте:');
+    console.log('   - Правильность BOT_TOKEN');
+    console.log('   - Доступность Vercel URL');
+    console.log('   - Интернет соединение');
   }
 }
 
-// Обработка аргументов командной строки
-const args = process.argv.slice(2);
-const action = args[0] || 'setup';
-
-if (action === '--help' || action === '-h') {
-  console.log(`
-📚 Помощь по настройке вебхука:
-
-Использование:
-  npm run setup           # Настройка вебхука
-  node scripts/setup-webhook.js [опции]
-
-Опции:
-  --help, -h             Показать эту справку
-  --test                 Тестирование без установки
-
-Переменные окружения:
-  TELEGRAM_BOT_TOKEN     Токен от @BotFather (обязательно)
-  VERCEL_URL             URL вашего приложения на Vercel
-  WEBHOOK_SECRET         Секретный ключ для защиты вебхука
-
-Примеры:
-  npm run setup
-  TELEGRAM_BOT_TOKEN=xxx node scripts/setup-webhook.js
-  `);
-  process.exit(0);
+// Автоматически запускаем если файл вызван напрямую
+if (require.main === module) {
+  setupWebhook();
 }
 
-// Запуск основной функции
-setupWebhook();
+// Экспортируем функцию для использования в других файлах
+module.exports = setupWebhook;
