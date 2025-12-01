@@ -2,35 +2,13 @@
   "functions": {
     "api/bot.js": {
       "maxDuration": 10,
-      "runtime": "nodejs20.x",
-      "memory": 1024,
-      "includeFiles": []
+      "runtime": "nodejs20.x"
     }
   },
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/bot"
-    },
-    {
-      "source": "/",
+      "source": "/(.*)",
       "destination": "/api/bot"
     }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET,POST,OPTIONS"
-        }
-      ]
-    }
-  ],
-  "regions": ["fra1"]
+  ]
 }
