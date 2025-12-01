@@ -1,16 +1,24 @@
 {
-  "version": 3,
-  "buildCommand": "npm install",
-  "installCommand": "npm install",
-  "functions": {
-    "api/*.js": {
-      "maxDuration": 30,
-      "memory": 1024,
-      "runtime": "nodejs24.x"
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "public/**/*",
+      "use": "@vercel/static"
     }
-  },
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "regions": ["fra1"]
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1",
+      "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/$1"
+    }
+  ]
 }
