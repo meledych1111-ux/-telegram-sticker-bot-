@@ -7,6 +7,11 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import TelegramBot from 'node-telegram-bot-api';
 
+// Импорты из наших модулей
+import * as database from '../lib/database.js';
+import logger from '../lib/logger.js';
+import * as utils from '../lib/utils.js';
+
 // ES Modules __dirname альтернатива
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,14 +32,13 @@ const config = {
 
 // Валидация токена
 if (!config.botToken) {
-  console.error('❌ TELEGRAM_BOT_TOKEN не установлен!');
+  logger.error('❌ TELEGRAM_BOT_TOKEN не установлен!');
   console.log('ℹ️  Установите в Vercel: Settings → Environment Variables');
   process.exit(1);
 }
 
-const tokenRegex = /^\d{9,11}:[A-Za-z0-9_-]{35}$/;
-if (!tokenRegex.test(config.botToken)) {
-  console.error('❌ Неверный формат токена Telegram Bot');
+if (!utils.validateBotToken(config.botToken)) {
+  logger.error('❌ Неверный формат токена Telegram Bot');
   process.exit(1);
 }
 
@@ -73,18 +77,10 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`${req.method} ${req.url} ${res.statusCode} ${duration}ms`);
+    logger.info(`${req.method} ${req.url} ${res.statusCode} ${duration}ms`);
   });
   next();
 });
-
-// Загрузка модулей
-console.log('🔄 Загрузка модулей...');
-import { getOrCreateUser, saveSticker, getStats } from '../lib/database.js';
-import { processImage } from '../lib/imageProcessor.js';
-import logger from '../lib/logger.js';
-
-console.log('✅ Модули загружены');
 
 // ========== КОМАНДЫ БОТА ==========
 
@@ -93,10 +89,10 @@ bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   const user = msg.from;
   
-  await logger.info(`/start от ${user.id} (@${user.username || 'no-username'})`);
+  logger.info(`/start от ${user.id} (@${user.username || 'no-username'})`);
   
   try {
-    await getOrCreateUser({
+    await database.getOrCreateUser({
       id: user.id,
       username: user.username,
       first_name: user.first_name,
@@ -124,8 +120,8 @@ bot.onText(/\/start/, async (msg) => {
       }
     });
     
-  } catch (error) {
-    await logger.error(`Ошибка /start: ${error.message}`);
+  } catch (err) {
+    logger.error(`Ошибка /start: ${err.message}`);
     await bot.sendMessage(chatId, 'Привет! Отправьте фото для стикера 📸');
   }
 });
@@ -176,7 +172,7 @@ bot.onText(/\/stats/, async (msg) => {
   const user = msg.from;
   
   try {
-    const stats = await getStats(user.id);
+    const stats = await database.getStats(user.id);
     
     const statsText = `📈 *Ваша статистика*\n\n` +
       `👤 ${user.first_name || 'Пользователь'}\n` +
@@ -187,7 +183,7 @@ bot.onText(/\/stats/, async (msg) => {
     await bot.sendMessage(chatId, statsText, {
       parse_mode: 'Markdown'
     });
-  } catch (error) {
+  } catch (err) {
     await bot.sendMessage(chatId, 'Статистика временно недоступна');
   }
 });
@@ -198,7 +194,7 @@ bot.on('photo', async (msg) => {
   const user = msg.from;
   const photo = msg.photo[msg.photo.length - 1];
   
-  await logger.info(`Фото от ${user.id}, размер: ${photo.file_size ? Math.round(photo.file_size / 1024) + 'KB' : '?'}`);
+  logger.info(`Фото от ${user.id}, размер: ${utils.formatFileSize(photo.file_size || 0)}`);
   
   try {
     await bot.sendChatAction(chatId, 'upload_photo');
@@ -211,19 +207,18 @@ bot.on('photo', async (msg) => {
     
     // Получаем информацию о файле
     const file = await bot.getFile(photo.file_id);
-    const fileUrl = `https://api.telegram.org/file/bot${config.botToken}/${file.file_path}`;
     
     // Имитация обработки изображения
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await utils.delay(2000);
     
     // Сохраняем в базу данных
-    const dbUser = await getOrCreateUser({
+    const dbUser = await database.getOrCreateUser({
       id: user.id,
       username: user.username,
       first_name: user.first_name
     });
     
-    await saveSticker({
+    await database.saveSticker({
       user_id: dbUser.id,
       telegram_file_id: photo.file_id,
       file_unique_id: photo.file_unique_id,
@@ -247,12 +242,12 @@ bot.on('photo', async (msg) => {
     // Удаляем сообщение о прогрессе
     await bot.deleteMessage(chatId, progressMsg.message_id);
     
-  } catch (error) {
-    await logger.error(`Ошибка обработки фото: ${error.message}`);
+  } catch (err) {
+    logger.error(`Ошибка обработки фото: ${err.message}`);
     
     await bot.sendMessage(chatId,
       `❌ *Ошибка обработки*\n\n` +
-      `${error.message || 'Попробуйте другое изображение'}`,
+      `${err.message || 'Попробуйте другое изображение'}`,
       { parse_mode: 'Markdown' }
     );
   }
@@ -285,17 +280,17 @@ app.post('/api/bot', async (req, res) => {
     // Проверка секретного токена
     const secret = req.query.secret || req.headers['x-telegram-secret'];
     if (secret !== config.webhookSecret && config.nodeEnv === 'production') {
-      console.warn('⚠️  Неавторизованный запрос вебхука');
+      logger.warn('⚠️  Неавторизованный запрос вебхука');
       return res.status(403).json({ error: 'Forbidden' });
     }
     
-    console.log(`📨 Webhook update: ${req.body?.update_id}`);
+    logger.info(`📨 Webhook update: ${req.body?.update_id}`);
     await bot.processUpdate(req.body);
     
     res.json({ ok: true });
-  } catch (error) {
-    console.error('❌ Webhook error:', error);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    logger.error('❌ Webhook error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -332,10 +327,10 @@ app.get('/api/setup-webhook', async (req, res) => {
       webhook: config.webhookUrl,
       timestamp: new Date().toISOString()
     });
-  } catch (error) {
+  } catch (err) {
     res.status(500).json({
       success: false,
-      error: error.message
+      error: err.message
     });
   }
 });
@@ -363,7 +358,7 @@ app.use((req, res) => {
 
 // Обработчик ошибок
 app.use((err, req, res, next) => {
-  console.error('🔥 Server error:', err);
+  logger.error('🔥 Server error:', err.message);
   res.status(500).json({
     error: 'Internal Server Error',
     message: config.nodeEnv === 'development' ? err.message : 'Произошла ошибка'
@@ -391,8 +386,8 @@ if (process.env.NODE_ENV !== 'production') {
         const botInfo = await bot.getMe();
         console.log(`🤖 Бот: @${botInfo.username} (${botInfo.first_name})`);
         console.log(`🔗 Ссылка: https://t.me/${botInfo.username}`);
-      } catch (error) {
-        console.error('❌ Ошибка установки вебхука:', error.message);
+      } catch (err) {
+        console.error('❌ Ошибка установки вебхука:', err.message);
       }
     }
   });
