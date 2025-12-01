@@ -21,11 +21,18 @@
     },
     {
       "src": "/api/check-env",
-      "dest": "/api/bot.js"
+      "dest": "/api/bot.js",
+      "methods": ["GET"]
     },
     {
       "src": "/api/version",
-      "dest": "/api/bot.js"
+      "dest": "/api/bot.js",
+      "methods": ["GET"]
+    },
+    {
+      "src": "/api/setup-webhook",
+      "dest": "/api/bot.js",
+      "methods": ["GET"]
     },
     {
       "src": "/(.*)",
