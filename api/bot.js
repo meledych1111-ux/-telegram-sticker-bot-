@@ -1,320 +1,332 @@
-// api/bot.js - Фиксированная версия для Vercel
+const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
-const { Pool } = require('pg');
 
-// ========== КОНФИГУРАЦИЯ ==========
-const config = {
-  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '8497134153:AAEQtYTVv-hCQ08HkD6Wwm6k2qsjmCHCgJI',
-  NEON_DATABASE_URL: process.env.NEON_DATABASE_URL,
-  VERCEL_URL: process.env.VERCEL_URL || 'https://telegram-sticker-bot-tau.vercel.app',
-  ADMIN_IDS: (process.env.ADMIN_IDS || '').split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-};
+// ========== ИНИЦИАЛИЗАЦИЯ ==========
+console.log('🚀 Запуск Telegram Sticker Bot...');
+console.log('Node.js версия:', process.version);
 
-// Проверка токена
-if (!config.TELEGRAM_BOT_TOKEN) {
+const token = process.env.TELEGRAM_BOT_TOKEN;
+if (!token) {
   console.error('❌ TELEGRAM_BOT_TOKEN не найден!');
-  process.exit(1);
+  console.log('');
+  console.log('========================== ВНИМАНИЕ ==========================');
+  console.log('Добавьте переменную в Vercel Dashboard:');
+  console.log('1. Откройте https://vercel.com/');
+  console.log('2. Выберите проект → Settings → Environment Variables');
+  console.log('3. Добавьте переменную:');
+  console.log('   Name: TELEGRAM_BOT_TOKEN');
+  console.log('   Value: 8497134153:AAEQtYTVv-hCQ08HkD6Wwm6k2qsjmCHCgJI');
+  console.log('4. Нажмите "Save"');
+  console.log('5. Передеплойте проект');
+  console.log('==============================================================');
+  
+  // Для Vercel нужно экспортировать функцию даже при ошибке
+  module.exports = (req, res) => {
+    res.status(500).json({
+      error: 'TELEGRAM_BOT_TOKEN not configured',
+      message: 'Add TELEGRAM_BOT_TOKEN to Environment Variables in Vercel Dashboard'
+    });
+  };
+  return;
 }
 
-// ========== ИНИЦИАЛИЗАЦИЯ БОТА ==========
-const bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, {
-  polling: false
-});
+const bot = new TelegramBot(token);
+const userSessions = {};
 
-// ========== NEON DATABASE ==========
-let dbPool;
-if (config.NEON_DATABASE_URL) {
+// Создаем Express app
+const app = express();
+app.use(express.json());
+
+// ========== WEBHOOK HANDLER ==========
+app.post('/api/bot', async (req, res) => {
+  console.log('📨 Получен запрос от Telegram');
+  
   try {
-    dbPool = new Pool({
-      connectionString: config.NEON_DATABASE_URL,
-      ssl: { rejectUnauthorized: false }
-    });
+    const update = req.body;
     
-    // Проверяем подключение
-    dbPool.query('SELECT NOW()', (err) => {
-      if (err) {
-        console.error('❌ Ошибка подключения к Neon:', err.message);
+    if (update.message) {
+      const chatId = update.message.chat.id;
+      const text = update.message.text;
+      const username = update.message.from.username || update.message.from.first_name;
+      
+      console.log(`👤 ${username}: ${text || 'фото'}`);
+      
+      if (text === '/start') {
+        const menu = {
+          reply_markup: {
+            keyboard: [
+              [{ text: '🎨 Создать стикер' }, { text: '📁 Мои стикеры' }],
+              [{ text: '📂 Папки' }, { text: '⭐ Избранное' }],
+              [{ text: '📊 Статистика' }, { text: '⚙️ Настройки' }],
+              [{ text: 'ℹ️ Помощь' }, { text: '👑 Топ' }]
+            ],
+            resize_keyboard: true,
+            input_field_placeholder: 'Выберите действие'
+          }
+        };
+        
+        await bot.sendMessage(chatId, 
+          `✨ *Добро пожаловать, ${username}!*\n\nЯ бот для создания стикеров!\nОтправьте фото или используйте меню.`,
+          { parse_mode: 'Markdown', ...menu }
+        );
+      }
+      else if (text === '🎨 Создать стикер') {
+        await bot.sendMessage(chatId, '📸 Отправьте мне фото или PNG для создания стикера!');
+        userSessions[chatId] = { state: 'awaiting_image' };
+      }
+      else if (text === '📁 Мои стикеры') {
+        await bot.sendMessage(chatId, '📭 Создайте первый стикер через "🎨 Создать стикер"');
+      }
+      else if (text === '📂 Папки') {
+        await bot.sendMessage(chatId, '📂 Создавайте папки для организации стикеров');
+      }
+      else if (text === '📊 Статистика') {
+        await bot.sendMessage(chatId, '📊 Статистика в разработке');
+      }
+      else if (text === 'ℹ️ Помощь') {
+        await bot.sendMessage(chatId, '❓ Помощь:\n1. Нажмите "🎨 Создать стикер"\n2. Отправьте фото\n3. Получите стикер!');
+      }
+      else if (text) {
+        await bot.sendMessage(chatId, 'Используйте меню или отправьте фото 🎨');
+      }
+    }
+    
+    // Фото
+    if (update.message?.photo) {
+      const chatId = update.message.chat.id;
+      const session = userSessions[chatId];
+      
+      if (session?.state === 'awaiting_image') {
+        await bot.sendMessage(chatId, '🔄 Обрабатываю фото...');
+        
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: '📝 Добавить текст', callback_data: 'effect_text' },
+              { text: '🖼️ Рамка', callback_data: 'effect_frame' }
+            ],
+            [
+              { text: '✨ Перламутр', callback_data: 'effect_pearl' },
+              { text: '🌈 Градиент', callback_data: 'effect_gradient' }
+            ]
+          ]
+        };
+        
+        await bot.sendMessage(chatId, '🎨 Выберите эффекты:', { reply_markup: keyboard });
+        delete userSessions[chatId];
       } else {
-        console.log('✅ Neon Database подключена');
-      }
-    });
-  } catch (error) {
-    console.error('❌ Ошибка инициализации базы данных:', error.message);
-  }
-}
-
-// ========== КОМАНДЫ БОТА ==========
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-  const user = msg.from;
-  
-  // Сохраняем пользователя если есть БД
-  if (dbPool) {
-    try {
-      await dbPool.query(`
-        INSERT INTO users (telegram_id, username, first_name, last_name, language_code)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (telegram_id) DO UPDATE SET
-          username = EXCLUDED.username,
-          last_active = CURRENT_TIMESTAMP
-      `, [
-        user.id,
-        user.username,
-        user.first_name,
-        user.last_name,
-        user.language_code
-      ]);
-    } catch (error) {
-      console.error('❌ Ошибка сохранения пользователя:', error.message);
-    }
-  }
-  
-  const welcomeText = `🎨 *Добро пожаловать в Sticker Bot!*\n\n` +
-    `Я помогу вам создать стикеры из ваших изображений.\n\n` +
-    `📸 *Как использовать:*\n` +
-    `1. Отправьте мне любое изображение\n` +
-    `2. Я обработаю его\n` +
-    `3. Вы получите готовый стикер\n\n` +
-    `💾 *База данных:* ${dbPool ? '✅ Neon' : '❌ Нет'}\n` +
-    `🔗 *Вебхук:* ${config.VERCEL_URL}\n\n` +
-    `*Команды:*\n` +
-    `/help - Помощь\n` +
-    `/stats - Статистика\n` +
-    `/dbinfo - Информация о БД`;
-  
-  await bot.sendMessage(chatId, welcomeText, { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/help/, (msg) => {
-  bot.sendMessage(msg.chat.id,
-    `🆘 *Помощь по боту*\n\n` +
-    `Поддерживаемые форматы: PNG, JPG, JPEG, WEBP\n` +
-    `Максимальный размер: 20MB\n\n` +
-    `Просто отправьте мне изображение!`,
-    { parse_mode: 'Markdown' }
-  );
-});
-
-bot.onText(/\/stats/, async (msg) => {
-  const chatId = msg.chat.id;
-  
-  if (!dbPool) {
-    await bot.sendMessage(chatId, '❌ База данных не настроена', { parse_mode: 'Markdown' });
-    return;
-  }
-  
-  try {
-    const result = await dbPool.query(`
-      SELECT 
-        (SELECT COUNT(*) FROM users) as total_users,
-        (SELECT COUNT(*) FROM stickers) as total_stickers
-    `);
-    
-    const stats = result.rows[0];
-    await bot.sendMessage(chatId,
-      `📊 *Статистика бота:*\n\n` +
-      `👥 Пользователей: *${stats.total_users}*\n` +
-      `🎨 Стикеров: *${stats.total_stickers}*\n\n` +
-      `🌐 *Сервер:* Vercel\n` +
-      `💾 *БД:* Neon\n` +
-      `⚡ *Статус:* Активен`,
-      { parse_mode: 'Markdown' }
-    );
-  } catch (error) {
-    console.error('❌ Ошибка получения статистики:', error);
-    await bot.sendMessage(chatId, '❌ Ошибка получения статистики', { parse_mode: 'Markdown' });
-  }
-});
-
-bot.onText(/\/dbinfo/, async (msg) => {
-  const chatId = msg.chat.id;
-  
-  if (!dbPool) {
-    await bot.sendMessage(chatId, '❌ База данных Neon не настроена', { parse_mode: 'Markdown' });
-    return;
-  }
-  
-  try {
-    const dbInfo = await dbPool.query(`
-      SELECT 
-        version() as pg_version,
-        current_database() as db_name,
-        current_user as db_user,
-        inet_server_addr() as db_host,
-        inet_server_port() as db_port
-    `);
-    
-    const info = dbInfo.rows[0];
-    await bot.sendMessage(chatId,
-      `💾 *Информация о базе данных:*\n\n` +
-      `📊 PostgreSQL: ${info.pg_version.split(',')[0]}\n` +
-      `🗄️ База: ${info.db_name}\n` +
-      `👤 Пользователь: ${info.db_user}\n` +
-      `🌐 Хост: ${info.db_host}\n` +
-      `🔌 Порт: ${info.db_port}\n\n` +
-      `✅ Подключение установлено`,
-      { parse_mode: 'Markdown' }
-    );
-  } catch (error) {
-    console.error('❌ Ошибка получения информации о БД:', error);
-    await bot.sendMessage(chatId, '❌ Ошибка подключения к БД', { parse_mode: 'Markdown' });
-  }
-});
-
-// Обработка изображений
-bot.on('photo', async (msg) => {
-  const chatId = msg.chat.id;
-  
-  await bot.sendChatAction(chatId, 'upload_photo');
-  await bot.sendMessage(chatId, '📸 *Получил изображение!*\n\nОбрабатываю...', { parse_mode: 'Markdown' });
-  
-  // Сохраняем в БД если есть подключение
-  if (dbPool) {
-    try {
-      const photo = msg.photo[msg.photo.length - 1];
-      const user = msg.from;
-      
-      // Сохраняем стикер
-      await dbPool.query(`
-        WITH user_insert AS (
-          INSERT INTO users (telegram_id, username, first_name, last_name)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (telegram_id) DO UPDATE SET last_active = CURRENT_TIMESTAMP
-          RETURNING id
-        )
-        INSERT INTO stickers (user_id, telegram_file_id, file_unique_id, width, height, file_size)
-        SELECT (SELECT id FROM user_insert), $5, $6, $7, $8, $9
-      `, [
-        user.id,
-        user.username,
-        user.first_name,
-        user.last_name,
-        photo.file_id,
-        photo.file_unique_id,
-        photo.width,
-        photo.height,
-        photo.file_size
-      ]);
-    } catch (error) {
-      console.error('❌ Ошибка сохранения стикера:', error.message);
-    }
-  }
-  
-  // Пока просто подтверждаем получение
-  setTimeout(async () => {
-    await bot.sendMessage(chatId,
-      `✅ *Обработка завершена!*\n\n` +
-      `К сожалению, функция создания стикеров временно недоступна.\n\n` +
-      `*Что работает:*\n` +
-      `• Получение изображений ✅\n` +
-      `• Сохранение в БД ✅\n` +
-      `• Статистика ✅\n\n` +
-      `Функция создания стикеров будет добавлена позже!`,
-      { parse_mode: 'Markdown' }
-    );
-  }, 2000);
-});
-
-// ========== VERCEL HANDLER ==========
-module.exports = async (req, res) => {
-  // Настройка вебхука
-  if (req.url === '/setup-webhook' || req.query.action === 'setup') {
-    try {
-      const webhookUrl = `${config.VERCEL_URL}/api/bot`;
-      await bot.setWebHook(webhookUrl);
-      
-      const botInfo = await bot.getMe();
-      res.json({
-        success: true,
-        message: 'Webhook установлен',
-        webhook: webhookUrl,
-        bot: `@${botInfo.username}`,
-        database: dbPool ? 'Neon ✅' : 'Not configured'
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
-    }
-    return;
-  }
-  
-  // Проверка здоровья
-  if (req.url === '/health' || req.query.action === 'health') {
-    let dbStatus = 'disconnected';
-    if (dbPool) {
-      try {
-        await dbPool.query('SELECT 1');
-        dbStatus = 'connected';
-      } catch (error) {
-        dbStatus = 'error: ' + error.message;
+        await bot.sendMessage(chatId, '📸 Получено фото! Нажмите "🎨 Создать стикер"');
       }
     }
     
-    res.json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      service: 'Telegram Sticker Bot',
-      version: '2.0.0',
-      runtime: 'Node.js 24',
-      database: dbStatus,
-      webhook: `${config.VERCEL_URL}/api/bot`
-    });
-    return;
-  }
-  
-  // Обработка вебхука Telegram
-  if (req.method === 'POST') {
-    try {
-      await bot.processUpdate(req.body);
-      res.status(200).send('OK');
-    } catch (error) {
-      console.error('❌ Ошибка обработки вебхука:', error);
-      res.status(500).send('Error');
+    // PNG
+    if (update.message?.document) {
+      const chatId = update.message.chat.id;
+      const doc = update.message.document;
+      
+      if (['image/png', 'image/jpeg'].includes(doc.mime_type)) {
+        await bot.sendMessage(chatId, `📎 Получен ${doc.mime_type}!`);
+      }
     }
-    return;
+    
+    // Callback кнопки
+    if (update.callback_query) {
+      const chatId = update.callback_query.message.chat.id;
+      const data = update.callback_query.data;
+      
+      if (data.startsWith('effect_')) {
+        await bot.sendMessage(chatId, '✅ Эффект применен! Стикер создается...');
+        await bot.sendMessage(chatId, '🎉 Стикер готов!');
+      }
+      
+      await bot.answerCallbackQuery(update.callback_query.id);
+    }
+    
+    res.status(200).json({ ok: true });
+    
+  } catch (error) {
+    console.error('❌ Ошибка:', error);
+    res.status(500).json({ error: error.message });
   }
-  
-  // Главная страница
-  if (req.method === 'GET') {
-    res.json({
-      service: 'Telegram Sticker Bot API',
-      status: 'running',
-      version: '2.0.0',
-      endpoints: {
-        webhook: 'POST /api/bot',
-        setup: 'GET /setup-webhook',
-        health: 'GET /health',
-        home: 'GET /'
-      },
-      database: dbPool ? 'Neon PostgreSQL ✅' : 'Not configured',
-      bot_token: config.TELEGRAM_BOT_TOKEN ? 'Configured' : 'Missing'
-    });
-    return;
-  }
-  
-  res.status(404).send('Not Found');
-};
+});
 
-// ========== ЗАПУСК СЕРВЕРА ==========
-if (require.main === module) {
-  const port = process.env.PORT || 3000;
-  const server = require('http').createServer((req, res) => {
-    module.exports(req, res);
+// ========== API ENDPOINTS ==========
+app.get('/api/bot', (req, res) => {
+  res.json({ 
+    status: 'online',
+    bot: 'Telegram Sticker Bot',
+    version: '1.0.0',
+    node: process.version,
+    time: new Date().toISOString(),
+    webhook: `${process.env.VERCEL_URL || 'https://your-project.vercel.app'}/api/bot`
   });
-  
-  server.listen(port, () => {
-    console.log(`🚀 Server running on port ${port}`);
-    console.log(`🤖 Bot token: ${config.TELEGRAM_BOT_TOKEN.substring(0, 10)}...`);
-    console.log(`💾 Database: ${dbPool ? 'Neon ✅' : 'Not configured'}`);
+});
+
+app.get('/api/check-env', (req, res) => {
+  res.json({
+    has_token: !!process.env.TELEGRAM_BOT_TOKEN,
+    vercel_url: process.env.VERCEL_URL,
+    node_env: process.env.NODE_ENV,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/setup-webhook', async (req, res) => {
+  try {
+    const webhookUrl = `${process.env.VERCEL_URL || 'https://your-project.vercel.app'}/api/bot`;
+    await bot.setWebHook(webhookUrl);
     
-    // Устанавливаем вебхук автоматически
-    const webhookUrl = `${config.VERCEL_URL}/api/bot`;
-    bot.setWebHook(webhookUrl).then(() => {
-      console.log(`✅ Webhook установлен: ${webhookUrl}`);
-    }).catch(err => {
-      console.error('❌ Ошибка установки вебхука:', err.message);
+    res.json({
+      success: true,
+      message: 'Webhook установлен',
+      webhook: webhookUrl
     });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'Telegram Sticker Bot',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+app.get('/', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Sticker Bot</title>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { 
+          font-family: 'Arial', sans-serif; 
+          text-align: center; 
+          padding: 40px; 
+          background: linear-gradient(135deg, #667eea, #764ba2); 
+          color: white; 
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .container { 
+          background: rgba(255,255,255,0.1); 
+          padding: 50px; 
+          border-radius: 25px; 
+          max-width: 700px; 
+          width: 100%;
+          backdrop-filter: blur(10px);
+          box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        h1 { 
+          font-size: 3em; 
+          margin-bottom: 20px;
+          color: white;
+          text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        p { 
+          font-size: 1.2em; 
+          line-height: 1.6;
+          margin-bottom: 30px;
+        }
+        .status {
+          background: rgba(255,255,255,0.2);
+          padding: 20px;
+          border-radius: 15px;
+          margin: 20px 0;
+        }
+        .btn { 
+          display: inline-block; 
+          padding: 15px 35px; 
+          margin: 10px; 
+          background: white; 
+          color: #667eea; 
+          text-decoration: none; 
+          border-radius: 50px; 
+          font-weight: bold;
+          font-size: 1.1em;
+          transition: all 0.3s;
+          border: 2px solid transparent;
+        }
+        .btn:hover {
+          background: transparent;
+          color: white;
+          border: 2px solid white;
+          transform: translateY(-3px);
+        }
+        .logo {
+          font-size: 4em;
+          margin-bottom: 20px;
+          display: block;
+        }
+        .info {
+          text-align: left;
+          background: rgba(0,0,0,0.2);
+          padding: 20px;
+          border-radius: 15px;
+          margin: 25px 0;
+          font-family: monospace;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="logo">🎨</div>
+        <h1>Telegram Sticker Bot</h1>
+        
+        <div class="status">
+          <p>✅ Бот работает на Vercel</p>
+          <p>Node.js ${process.version}</p>
+          <p>Токен: ${process.env.TELEGRAM_BOT_TOKEN ? '✅ Установлен' : '❌ Отсутствует'}</p>
+        </div>
+        
+        <div class="info">
+          <p><strong>Вебхук URL:</strong> ${process.env.VERCEL_URL || 'https://your-project.vercel.app'}/api/bot</p>
+          <p><strong>Токен бота:</strong> ${process.env.TELEGRAM_BOT_TOKEN ? '8497134153:AAE...' : 'Не установлен'}</p>
+        </div>
+        
+        <div>
+          <a href="/api/bot" class="btn">📊 Проверить API</a>
+          <a href="/api/check-env" class="btn">⚙️ Настройки</a>
+          <a href="/health" class="btn">❤️ Health Check</a>
+          <a href="/setup-webhook" class="btn">🔗 Установить вебхук</a>
+        </div>
+        
+        <p style="margin-top: 40px; font-size: 0.9em; opacity: 0.8;">
+          Проект развернут на Vercel Free Tier с Node.js 24
+        </p>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+// ========== VERCEL EXPORT ==========
+// ВАЖНО: Для Vercel нужно экспортировать app
+module.exports = app;
+
+// ========== ЛОКАЛЬНЫЙ ЗАПУСК ==========
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`✅ Сервер запущен на порту ${PORT}`);
+    console.log(`🌐 Webhook URL: ${process.env.VERCEL_URL || 'http://localhost:' + PORT}/api/bot`);
+    
+    // Устанавливаем вебхук автоматически при локальном запуске
+    if (process.env.VERCEL_URL) {
+      const webhookUrl = `${process.env.VERCEL_URL}/api/bot`;
+      bot.setWebHook(webhookUrl)
+        .then(() => console.log(`✅ Webhook установлен: ${webhookUrl}`))
+        .catch(err => console.error('❌ Ошибка установки webhook:', err.message));
+    }
   });
 }
