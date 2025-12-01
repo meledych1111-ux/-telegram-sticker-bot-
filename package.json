@@ -1,24 +1,18 @@
 {
   "name": "telegram-sticker-bot",
-  "version": "2.1.0",
-  "description": "Optimized sticker bot for 1vCPU/2GB Vercel",
+  "version": "1.0.0",
+  "description": "Telegram Sticker Bot on Vercel",
   "main": "api/bot.js",
   "scripts": {
     "start": "node api/bot.js",
-    "dev": "node --env-file=.env --watch api/bot.js",
-    "setup-webhook": "node scripts/setup-webhook.js",
-    "build": "echo 'No build step required'",
-    "vercel-build": "echo 'No build step'"
+    "dev": "node api/bot.js"
   },
   "dependencies": {
     "telegraf": "^4.16.3",
-    "sharp": "^0.33.4",
-    "pg": "^8.11.3"
-  },
-  "devDependencies": {
-    "dotenv": "^16.3.1"
+    "node-fetch": "^3.3.2",
+    "form-data": "^4.0.0"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=18"
   }
 }
