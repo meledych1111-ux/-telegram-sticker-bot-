@@ -1,10 +1,11 @@
 {
   "name": "telegram-sticker-bot",
   "version": "1.0.0",
-  "description": "Telegram Sticker Bot with Vercel and Neon DB",
+  "description": "Telegram Sticker Bot with beautiful menus",
   "main": "api/bot.js",
   "scripts": {
-    "start": "node api/bot.js"
+    "start": "node api/bot.js",
+    "dev": "node api/bot.js"
   },
   "dependencies": {
     "node-telegram-bot-api": "^0.61.0",
