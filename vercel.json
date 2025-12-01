@@ -7,20 +7,6 @@
       "config": {
         "nodeVersion": "24.x"
       }
-    },
-    {
-      "src": "api/check-env.js",
-      "use": "@vercel/node",
-      "config": {
-        "nodeVersion": "24.x"
-      }
-    },
-    {
-      "src": "api/version.js",
-      "use": "@vercel/node",
-      "config": {
-        "nodeVersion": "24.x"
-      }
     }
   ],
   "routes": [
@@ -35,13 +21,11 @@
     },
     {
       "src": "/api/check-env",
-      "dest": "/api/check-env.js",
-      "methods": ["GET"]
+      "dest": "/api/bot.js"
     },
     {
       "src": "/api/version",
-      "dest": "/api/version.js",
-      "methods": ["GET"]
+      "dest": "/api/bot.js"
     },
     {
       "src": "/(.*)",
@@ -53,16 +37,9 @@
       "maxDuration": 30,
       "memory": 1024,
       "runtime": "nodejs24.x"
-    },
-    "api/check-env.js": {
-      "maxDuration": 10,
-      "memory": 512,
-      "runtime": "nodejs24.x"
-    },
-    "api/version.js": {
-      "maxDuration": 10,
-      "memory": 512,
-      "runtime": "nodejs24.x"
     }
+  },
+  "env": {
+    "NODE_ENV": "production"
   }
 }
