@@ -1,0 +1,22 @@
+{
+  "functions": {
+    "api/bot.js": {
+      "maxDuration": 10,
+      "memory": 1024
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/", "destination": "/public/index.html" },
+    { "source": "/api/bot", "destination": "/api/bot.js" },
+    { "source": "/webhook", "destination": "/api/bot.js" }
+  ]
+}
