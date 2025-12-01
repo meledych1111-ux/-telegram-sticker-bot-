@@ -1,35 +1,19 @@
 {
   "name": "telegram-sticker-bot",
-  "version": "2.0.0",
-  "description": "Full-featured sticker bot with effects, frames, text, and rating system for Vercel + Neon",
+  "version": "2.1.0",
+  "description": "Optimized sticker bot for 1vCPU/2GB Vercel",
   "main": "api/bot.js",
   "scripts": {
     "start": "node api/bot.js",
     "dev": "node --env-file=.env --watch api/bot.js",
     "setup-webhook": "node scripts/setup-webhook.js",
-    "deploy": "node scripts/deploy.js",
-    "vercel-build": "echo 'No build step required'",
-    "test": "echo 'No tests yet' && exit 0"
+    "build": "echo 'No build step required'",
+    "vercel-build": "echo 'No build step'"
   },
-  "keywords": [
-    "telegram",
-    "bot",
-    "sticker",
-    "vercel",
-    "neon",
-    "postgresql",
-    "sharp"
-  ],
-  "author": "Your Name",
-  "license": "MIT",
   "dependencies": {
     "telegraf": "^4.16.3",
     "sharp": "^0.33.4",
-    "pg": "^8.11.3",
-    "node-cache": "^5.1.2",
-    "axios": "^1.6.2",
-    "form-data": "^4.0.0",
-    "crypto": "^1.0.1"
+    "pg": "^8.11.3"
   },
   "devDependencies": {
     "dotenv": "^16.3.1"
