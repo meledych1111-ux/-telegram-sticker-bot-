@@ -3,57 +3,20 @@
   "builds": [
     {
       "src": "api/bot.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/webhook.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "runtime": "nodejs24.x"
+      }
     }
   ],
   "routes": [
     {
-      "src": "/api/bot",
-      "dest": "/api/bot",
-      "methods": ["GET", "POST"]
-    },
-    {
-      "src": "/setup-webhook",
-      "dest": "/api/webhook.js"
-    },
-    {
-      "src": "/webhook-info",
-      "dest": "/api/webhook.js?action=info"
-    },
-    {
-      "src": "/admin",
-      "dest": "/api/bot?admin=true"
-    },
-    {
-      "src": "/health",
-      "dest": "/api/bot?action=health"
-    },
-    {
-      "src": "/(.*\\.(html|css|js|png|jpg|ico))",
-      "dest": "/public/$1"
+      "src": "/api/(.*)",
+      "dest": "/api/bot"
     },
     {
       "src": "/",
-      "dest": "/public/index.html"
+      "dest": "/api/bot"
     }
-  ],
-  "functions": {
-    "api/bot.js": {
-      "maxDuration": 60,
-      "memory": 3008,
-      "runtime": "nodejs24.x"
-    },
-    "api/webhook.js": {
-      "maxDuration": 10,
-      "memory": 1024,
-      "runtime": "nodejs24.x"
-    }
-  },
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
