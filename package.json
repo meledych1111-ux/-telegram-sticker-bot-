@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "Telegram Sticker Bot with beautiful menus",
   "main": "api/bot.js",
+  "type": "commonjs",  // ← ДОБАВЬТЕ ЭТУ СТРОКУ
   "scripts": {
     "start": "node api/bot.js",
     "dev": "node --watch api/bot.js"
