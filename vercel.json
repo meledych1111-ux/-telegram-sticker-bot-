@@ -1,29 +1,16 @@
 {
   "functions": {
     "api/bot.js": {
-      "maxDuration": 10,
-      "memory": 1769,
-      "runtime": "nodejs20.x"
-    },
-    "api/status.js": {
-      "maxDuration": 3,
-      "memory": 256,
-      "runtime": "nodejs20.x"
+      "maxDuration": 10
     }
   },
-  "regions": ["fra1"],
-  "headers": [
+  "rewrites": [
     {
       "source": "/(.*)",
-      "headers": [
-        { "key": "X-DNS-Prefetch-Control", "value": "on" },
-        { "key": "X-Frame-Options", "value": "SAMEORIGIN" }
-      ]
+      "destination": "/api/bot"
     }
   ],
-  "rewrites": [
-    { "source": "/", "destination": "/public/index.html" },
-    { "source": "/api/bot", "destination": "/api/bot.js" },
-    { "source": "/status", "destination": "/api/status.js" }
-  ]
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
