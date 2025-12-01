@@ -1,116 +1,181 @@
+// Production-ready Telegram Bot for Vercel
 const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
+const helmet = require('helmet');
 const cors = require('cors');
-const path = require('path');
+const compression = require('compression');
+const { RateLimiterMemory } = require('rate-limiter-flexible');
 
-console.log('🚀 Запуск Telegram Sticker Bot...');
-console.log('Node.js версия:', process.version);
-console.log('Node.js 24 ✅');
+// Логирование
+const logger = require('../lib/logger');
+const database = require('../lib/database');
+const imageProcessor = require('../lib/imageProcessor');
+const menu = require('./menu');
 
-// Проверка переменных окружения
+console.log('🚀 PRODUCTION Telegram Sticker Bot');
+console.log('📅', new Date().toISOString());
+console.log('🌍 NODE_ENV:', process.env.NODE_ENV || 'development');
+console.log('⚙️ Node.js:', process.version);
+
+// ========== ВАЛИДАЦИЯ ТОКЕНА ==========
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const NEON_DATABASE_URL = process.env.NEON_DATABASE_URL;
 
 if (!BOT_TOKEN) {
-  console.error('❌ TELEGRAM_BOT_TOKEN не найден!');
-  console.log('');
-  console.log('=== ДОБАВЬТЕ В VERCEL DASHBOARD ===');
-  console.log('1. Settings → Environment Variables');
-  console.log('2. Добавьте переменную:');
-  console.log('   Name: TELEGRAM_BOT_TOKEN');
-  console.log('   Value: 8497134153:AAEQtYTVv-hCQ08HkD6Wwm6k2qsjmCHCgJI');
-  console.log('3. Передеплойте проект');
-  console.log('====================================');
+  logger.error('TELEGRAM_BOT_TOKEN не настроен');
+  console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: TELEGRAM_BOT_TOKEN отсутствует');
+  console.log('\n⚙️ НАСТРОЙКА В VERCEL:');
+  console.log('1. Vercel Dashboard → Project → Settings → Environment Variables');
+  console.log('2. Добавить: TELEGRAM_BOT_TOKEN = ваш_токен_от_BotFather');
+  console.log('3. Добавить: NEON_DATABASE_URL = строка_подключения_от_neon');
+  console.log('4. Redeploy проект');
   process.exit(1);
 }
 
-// Инициализация бота
-const bot = new TelegramBot(BOT_TOKEN, { polling: false });
-const app = express();
+// Проверка формата токена
+if (!/^\d{9,10}:[A-Za-z0-9_-]{35}$/.test(BOT_TOKEN)) {
+  logger.error('Неверный формат токена');
+  console.error('❌ НЕВЕРНЫЙ ФОРМАТ ТОКЕНА');
+  console.log('Получите токен у @BotFather в Telegram');
+  process.exit(1);
+}
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
-
-// URL вебхука
-const VERCEL_URL = process.env.VERCEL_URL || 'https://telegram-sticker-bot-tau.vercel.app';
-const WEBHOOK_URL = `${VERCEL_URL}/api/bot`;
-
-// ========== ИМПОРТ МОДУЛЕЙ ==========
-const menu = require('./menu');
-const database = require('../lib/database');
-const imageProcessor = require('../lib/imageProcessor');
-
-// Проверка соединения с БД
-database.checkConnection().then(isConnected => {
-  console.log(`💾 База данных: ${isConnected ? 'Neon ✅' : 'Недоступна ❌'}`);
+// ========== ИНИЦИАЛИЗАЦИЯ ==========
+const bot = new TelegramBot(BOT_TOKEN, {
+  polling: false,
+  request: {
+    timeout: 10000,
+    agentOptions: {
+      keepAlive: true,
+      maxSockets: 50
+    }
+  }
 });
 
-// ========== ОБРАБОТЧИКИ КОМАНД ==========
+const app = express();
+const VERCEL_URL = process.env.VERCEL_URL || 'https://your-project.vercel.app';
+const WEBHOOK_URL = `${VERCEL_URL}/api/bot`;
 
-// /start - главная команда
-bot.onText(/\/start/, async (msg) => {
-  const chatId = msg.chat.id;
-  const user = msg.from;
+// ========== MIDDLEWARE ==========
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://api.telegram.org"]
+    }
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://your-project.vercel.app', 'https://telegram.org']
+    : '*',
+  credentials: true
+}));
+
+app.use(compression());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Rate Limiting
+const rateLimiter = new RateLimiterMemory({
+  points: 100, // запросов
+  duration: 60, // за 60 секунд
+  blockDuration: 300 // блокировка на 5 минут
+});
+
+app.use((req, res, next) => {
+  const clientIp = req.ip || req.connection.remoteAddress;
   
+  rateLimiter.consume(clientIp)
+    .then(() => next())
+    .catch(() => {
+      logger.warn(`Rate limit exceeded for IP: ${clientIp}`);
+      res.status(429).json({ 
+        error: 'Слишком много запросов. Попробуйте позже.' 
+      });
+    });
+});
+
+// ========== ЗАЩИЩЕННЫЕ ЭНДПОИНТЫ ==========
+const ADMIN_IDS = (process.env.ADMIN_IDS || '').split(',').map(id => parseInt(id.trim())).filter(id => id);
+
+// Проверка админа
+const isAdmin = (userId) => ADMIN_IDS.includes(userId);
+
+// ========== ОСНОВНЫЕ КОМАНДЫ ==========
+
+// /start
+bot.onText(/\/start/, async (msg) => {
   try {
-    // Сохраняем пользователя в БД
-    const dbUser = await database.getOrCreateUser(user);
+    const chatId = msg.chat.id;
+    const user = msg.from;
     
-    const welcomeText = `🎨 *Добро пожаловать в Sticker Bot, ${user.first_name || 'друг'}!*\n\n` +
-      `🤖 Я помогу вам создавать красивые стикеры из любых изображений!\n\n` +
-      `📸 *Как это работает:*\n` +
-      `1. Отправьте мне фото или картинку\n` +
-      `2. Выберите эффекты и рамку\n` +
-      `3. Получите готовый стикер!\n\n` +
-      `✨ *Доступные эффекты:*\n` +
-      `• Разные рамки (цветные, градиентные)\n` +
-      `• Перламутровый эффект\n` +
-      `• Текстовые наложения\n` +
-      `• Автоматическая обрезка\n\n` +
-      `📊 *Ваша статистика:*\n` +
-      `• Создано стикеров: ${dbUser?.stickers_created || 0}\n` +
-      `• Рейтинг: ${dbUser?.rating || 'Новый'}\n` +
-      `• В системе с: ${new Date(dbUser?.created_at).toLocaleDateString('ru-RU')}\n\n` +
-      `*Используйте меню ниже или отправьте изображение!*`;
+    // Логируем старт
+    logger.info(`/start от ${user.id} (@${user.username || 'no-username'})`);
     
-    await bot.sendMessage(chatId, welcomeText, {
+    // Регистрируем в БД
+    await database.getOrCreateUser(user);
+    
+    const welcomeMessage = `🎉 *Добро пожаловать, ${user.first_name || 'друг'}!*\n\n` +
+      `🤖 *Telegram Sticker Bot v${require('../package.json').version}*\n\n` +
+      `📸 *Возможности:*\n` +
+      `✅ Создание стикеров из любых изображений\n` +
+      `🎨 Эффекты: рамки, фильтры, текст\n` +
+      `💾 Сохранение в облачную базу\n` +
+      `⭐ Рейтинг и топ пользователей\n` +
+      `📂 Организация в папки\n\n` +
+      `⚡ *Технологии:*\n` +
+      `• Node.js 24\n` +
+      `• Vercel Serverless\n` +
+      `• Neon PostgreSQL\n\n` +
+      `📊 *Статус:* ✅ Активен\n` +
+      `🔒 *Безопасность:* TLS/SSL\n\n` +
+      `*Используйте меню или отправьте изображение!*`;
+    
+    await bot.sendMessage(chatId, welcomeMessage, {
       parse_mode: 'Markdown',
       ...menu.mainMenu(user.first_name)
     });
     
   } catch (error) {
-    console.error('❌ Ошибка /start:', error);
-    await bot.sendMessage(chatId, 'Привет! Используйте меню ниже 👇', menu.mainMenu());
+    logger.error('Ошибка в /start:', error);
   }
 });
 
-// /help - помощь
+// /help
 bot.onText(/\/help/, async (msg) => {
   const chatId = msg.chat.id;
   
-  const helpText = `🆘 *Помощь по боту*\n\n` +
-    `*Основные команды:*\n` +
+  const helpText = `🆘 *Помощь и поддержка*\n\n` +
+    `📖 *Основные команды:*\n` +
     `/start - Главное меню\n` +
     `/help - Эта справка\n` +
     `/stats - Ваша статистика\n` +
     `/top - Топ пользователей\n` +
     `/settings - Настройки\n\n` +
-    `*Как создать стикер:*\n` +
-    `1. Отправьте изображение (JPG, PNG, GIF, WEBP)\n` +
-    `2. Выберите эффекты из меню\n` +
-    `3. Настройте рамку и текст\n` +
-    `4. Сохраните стикер\n\n` +
-    `*Лимиты:*\n` +
-    `• Размер файла: до 20MB\n` +
-    `• Форматы: PNG, JPG, GIF, WEBP\n` +
-    `• Стикеров на пользователя: 100\n` +
-    `• Папок на пользователя: 10\n\n` +
-    `*Проблемы?*\n` +
-    `• Если стикер не создается, попробуйте другое изображение\n` +
-    `• Убедитесь, что файл не превышает 20MB\n` +
-    `• Перезапустите бота командой /start`;
+    `🖼️ *Создание стикера:*\n` +
+    `1. Отправьте фото или PNG\n` +
+    `2. Выберите эффекты\n` +
+    `3. Настройте параметры\n` +
+    `4. Скачайте готовый стикер\n\n` +
+    `📊 *Лимиты:*\n` +
+    `• Макс. размер: 20MB\n` +
+    `• Форматы: JPG, PNG, WEBP\n` +
+    `• Стикеров на аккаунт: 1000\n\n` +
+    `🔧 *Техподдержка:*\n` +
+    `• Баг-репорты: /report\n` +
+    `• Предложения: /suggest\n` +
+    `• Контакты: @ваш_никнейм\n\n` +
+    `📞 *Аварийные контакты:*\n` +
+    `• Админ: ${ADMIN_IDS.length > 0 ? ADMIN_IDS[0] : 'не настроен'}`;
   
   await bot.sendMessage(chatId, helpText, {
     parse_mode: 'Markdown',
@@ -118,39 +183,37 @@ bot.onText(/\/help/, async (msg) => {
   });
 });
 
-// /stats - статистика
+// /stats
 bot.onText(/\/stats/, async (msg) => {
-  const chatId = msg.chat.id;
-  const user = msg.from;
-  
   try {
+    const chatId = msg.chat.id;
+    const user = msg.from;
+    
     const stats = await database.getStats(user.id);
     
-    let statsText = `📊 *Ваша статистика*\n\n`;
+    let statsText = `📊 *Системная статистика*\n\n`;
     
     if (stats) {
-      statsText += `👤 *Профиль:*\n` +
-                  `• Имя: ${stats.first_name}\n` +
-                  `• Username: @${stats.username || 'нет'}\n` +
-                  `• ID: \`${user.id}\`\n\n` +
-                  `🎨 *Творчество:*\n` +
-                  `• Создано стикеров: *${stats.stickers_created}*\n` +
-                  `• Папок: *${stats.folders_count}*\n` +
-                  `• Средний рейтинг: *${stats.avg_rating.toFixed(1)}/5*\n\n` +
-                  `📈 *Активность:*\n` +
-                  `• Просмотров: ${stats.total_views}\n` +
-                  `• Лайков: ${stats.total_likes}\n` +
-                  `• Зарегистрирован: ${new Date(stats.joined_date).toLocaleDateString('ru-RU')}\n` +
-                  `• Был активен: ${new Date(stats.last_active).toLocaleString('ru-RU')}\n\n`;
-    } else {
-      statsText += `Вы еще не создали ни одного стикера!\n\n`;
+      statsText += `👤 *Ваш профиль:*\n` +
+                  `• ID: \`${user.id}\`\n` +
+                  `• Стикеров: ${stats.stickers_created || 0}\n` +
+                  `• Рейтинг: ${stats.avg_rating?.toFixed(1) || '0.0'}/5.0\n` +
+                  `• В системе: ${new Date(stats.created_at).toLocaleDateString('ru-RU')}\n\n`;
     }
     
-    statsText += `🌐 *Техническая информация:*\n` +
-                `• Хостинг: Vercel (Node.js 24)\n` +
-                `• База данных: Neon PostgreSQL\n` +
-                `• Статус: ✅ Активен\n\n` +
-                `*Создайте первый стикер и увеличьте свою статистику!*`;
+    // Системная статистика
+    const dbStats = await database.getSystemStats();
+    
+    statsText += `🌐 *Система:*\n` +
+                `• Пользователей: ${dbStats?.total_users || 0}\n` +
+                `• Всего стикеров: ${dbStats?.total_stickers || 0}\n` +
+                `• За сегодня: ${dbStats?.daily_stickers || 0}\n` +
+                `• Uptime: ${Math.floor(process.uptime() / 3600)}ч\n\n` +
+                `⚙️ *Инфраструктура:*\n` +
+                `• Хостинг: Vercel\n` +
+                `• Runtime: Node.js 24\n` +
+                `• БД: Neon PostgreSQL\n` +
+                `• Режим: ${process.env.NODE_ENV || 'development'}`;
     
     await bot.sendMessage(chatId, statsText, {
       parse_mode: 'Markdown',
@@ -158,66 +221,37 @@ bot.onText(/\/stats/, async (msg) => {
     });
     
   } catch (error) {
-    console.error('❌ Ошибка /stats:', error);
-    await bot.sendMessage(chatId, '❌ Не удалось загрузить статистику', menu.mainMenu());
-  }
-});
-
-// /top - топ пользователей
-bot.onText(/\/top/, async (msg) => {
-  const chatId = msg.chat.id;
-  
-  try {
-    const topUsers = await database.getTopUsers(10);
-    
-    let topText = `👑 *Топ пользователей бота*\n\n`;
-    
-    topUsers.forEach((user, index) => {
-      const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '▫️';
-      topText += `${medal} *${user.first_name || user.username || 'Аноним'}*\n`;
-      topText += `   Стикеров: ${user.stickers_created} | Лайков: ${user.total_likes}\n`;
-      topText += `   Рейтинг: ${user.avg_rating?.toFixed(1) || '0.0'}/5\n\n`;
-    });
-    
-    if (topUsers.length === 0) {
-      topText += `Пока нет активных пользователей.\nБудьте первым! 🚀\n\n`;
-    }
-    
-    topText += `📊 *Как попасть в топ?*\n` +
-              `• Создавайте больше стикеров\n` +
-              `• Получайте лайки за свои работы\n` +
-              `• Делитесь стикерами с друзьями\n\n` +
-              `*Удачи в творчестве!*`;
-    
-    await bot.sendMessage(chatId, topText, {
-      parse_mode: 'Markdown',
-      ...menu.mainMenu()
-    });
-    
-  } catch (error) {
-    console.error('❌ Ошибка /top:', error);
-    await bot.sendMessage(chatId, '❌ Не удалось загрузить топ', menu.mainMenu());
+    logger.error('Ошибка в /stats:', error);
   }
 });
 
 // ========== ОБРАБОТКА ИЗОБРАЖЕНИЙ ==========
-
-// Получение фото
 bot.on('photo', async (msg) => {
   const chatId = msg.chat.id;
   const user = msg.from;
   const photo = msg.photo[msg.photo.length - 1];
   
   try {
+    // Проверяем размер
+    if (photo.file_size > 20 * 1024 * 1024) {
+      await bot.sendMessage(chatId, 
+        '❌ *Файл слишком большой!*\nМаксимальный размер: 20MB',
+        { parse_mode: 'Markdown' }
+      );
+      return;
+    }
+    
     await bot.sendChatAction(chatId, 'upload_photo');
     
     const progressMsg = await bot.sendMessage(
       chatId,
-      '📸 *Получено изображение!*\n\n🔄 Обрабатываю...',
+      '📸 *Обработка изображения...*\n\n' +
+      '🔄 Загрузка → Обработка → Создание стикера\n' +
+      '⏱️ Это займет 5-10 секунд',
       { parse_mode: 'Markdown' }
     );
     
-    // Получаем ссылку на файл
+    // Получаем файл
     const fileLink = await bot.getFileLink(photo.file_id);
     
     // Обрабатываем изображение
@@ -225,7 +259,8 @@ bot.on('photo', async (msg) => {
       addFrame: true,
       frameSize: 20,
       frameColor: 'white',
-      addPearlEffect: true
+      addPearlEffect: true,
+      optimize: true
     });
     
     // Сохраняем в БД
@@ -239,21 +274,22 @@ bot.on('photo', async (msg) => {
       file_size: processed.size,
       has_frame: true,
       frame_color: 'white',
-      has_pearl_effect: true
+      has_pearl_effect: true,
+      mime_type: 'image/png'
     });
     
-    // Отправляем обработанное изображение
+    // Отправляем результат
     await bot.sendPhoto(chatId, processed.buffer, {
-      caption: `✅ *Стикер готов!*\n\n` +
+      caption: `✅ *Стикер создан!*\n\n` +
               `📐 Размер: ${processed.width}x${processed.height}\n` +
               `💾 Вес: ${(processed.size / 1024).toFixed(2)} KB\n` +
-              `🎨 Эффекты: Рамка + Перламутр\n` +
-              `🆔 ID: \`${sticker.id.slice(0, 8)}\`\n\n` +
-              `*Чтобы использовать как стикер:*\n` +
+              `🎨 Формат: PNG (оптимизирован)\n` +
+              `🆔 ID: \`${sticker.id?.slice(0, 8) || 'N/A'}\`\n\n` +
+              `*Использование:*\n` +
               `1. Сохраните это изображение\n` +
-              `2. В Telegram: "Новый стикер"\n` +
-              `3. Выберите это фото\n\n` +
-              `⭐ *Оценить стикер:* /rate_${sticker.id.slice(0, 8)}`,
+              `2. В Telegram: Создать стикер\n` +
+              `3. Выберите сохраненный файл\n\n` +
+              `⭐ *Оценить:* /rate_${sticker.id?.slice(0, 8) || 'new'}`,
       parse_mode: 'Markdown',
       ...menu.stickerActionsMenu(sticker.id)
     });
@@ -261,92 +297,162 @@ bot.on('photo', async (msg) => {
     // Удаляем сообщение о прогрессе
     await bot.deleteMessage(chatId, progressMsg.message_id);
     
+    logger.info(`Стикер создан для ${user.id}, размер: ${processed.size} байт`);
+    
   } catch (error) {
-    console.error('❌ Ошибка обработки фото:', error);
-    await bot.sendMessage(
-      chatId,
-      `❌ *Ошибка обработки!*\n\n` +
+    logger.error('Ошибка обработки фото:', error);
+    
+    await bot.sendMessage(chatId, 
+      `❌ *Ошибка обработки*\n\n` +
       `Причина: ${error.message || 'Неизвестная ошибка'}\n\n` +
-      `Попробуйте:\n` +
-      `• Другое изображение\n` +
-      `• Меньший размер файла\n` +
-      `• Формат PNG или JPG`,
+      `*Что делать:*\n` +
+      `• Проверьте формат изображения\n` +
+      `• Убедитесь, что размер < 20MB\n` +
+      `• Попробуйте другое изображение\n` +
+      `• Если проблема повторяется, сообщите админу`,
       { parse_mode: 'Markdown' }
     );
   }
 });
 
-// ========== VERCEL SERVERLESS HANDLER ==========
+// ========== VERCEL HANDLER ==========
 
-// Обработчик вебхука
-app.post('/api/bot', async (req, res) => {
-  try {
-    await bot.processUpdate(req.body);
-    res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('❌ Ошибка вебхука:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// API эндпоинты
-app.get('/api/health', async (req, res) => {
-  const dbConnected = await database.checkConnection();
+// Health check
+app.get('/health', async (req, res) => {
+  const dbStatus = await database.checkConnection();
+  const memoryUsage = process.memoryUsage();
   
   res.json({
     status: 'healthy',
     service: 'Telegram Sticker Bot',
-    version: '4.0.0',
-    runtime: 'Node.js 24',
+    version: require('../package.json').version,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    database: dbConnected ? 'connected' : 'disconnected',
+    memory: {
+      rss: Math.round(memoryUsage.rss / 1024 / 1024) + 'MB',
+      heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024) + 'MB',
+      heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024) + 'MB'
+    },
+    database: dbStatus ? 'connected' : 'disconnected',
+    environment: process.env.NODE_ENV,
     webhook: WEBHOOK_URL
   });
 });
 
-app.get('/api/setup-webhook', async (req, res) => {
+// Webhook endpoint
+app.post('/api/bot', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    await bot.setWebHook(WEBHOOK_URL);
-    const botInfo = await bot.getMe();
+    // Валидация запроса
+    if (!req.body || typeof req.body !== 'object') {
+      logger.warn('Некорректный запрос к вебхуку');
+      return res.status(400).json({ error: 'Invalid request' });
+    }
     
-    res.json({
-      success: true,
-      message: 'Webhook установлен',
-      bot: `@${botInfo.username}`,
-      webhook: WEBHOOK_URL,
-      database: await database.checkConnection() ? 'Neon ✅' : '❌'
+    // Логируем запрос
+    if (req.body.update_id) {
+      logger.debug(`Webhook update ${req.body.update_id} received`);
+    }
+    
+    // Обрабатываем обновление
+    await bot.processUpdate(req.body);
+    
+    const processingTime = Date.now() - startTime;
+    logger.debug(`Webhook processed in ${processingTime}ms`);
+    
+    res.status(200).json({ 
+      ok: true, 
+      processing_time: processingTime 
     });
+    
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
+    logger.error('Webhook error:', error);
+    
+    // Не раскрываем детали ошибки в продакшене
+    const errorMessage = process.env.NODE_ENV === 'production'
+      ? 'Internal server error'
+      : error.message;
+    
+    res.status(500).json({ 
+      error: errorMessage,
+      timestamp: new Date().toISOString()
     });
   }
 });
 
-// Статическая страница
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+// Admin endpoint
+app.get('/admin/stats', async (req, res) => {
+  // Простая проверка по токену
+  const adminToken = req.headers['x-admin-token'];
+  
+  if (!adminToken || adminToken !== process.env.ADMIN_TOKEN) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  
+  const stats = await database.getSystemStats();
+  const botInfo = await bot.getMe().catch(() => null);
+  
+  res.json({
+    bot: botInfo,
+    database: stats,
+    system: {
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      node: process.version,
+      env: process.env.NODE_ENV
+    }
+  });
 });
 
-// ========== ЭКСПОРТ ДЛЯ VERCEL ==========
-module.exports = app;
+// Main endpoint
+app.get('/', (req, res) => {
+  res.sendFile(require('path').join(__dirname, '../public/index.html'));
+});
 
-// ========== ЛОКАЛЬНЫЙ ЗАПУСК ==========
+// ========== ИНИЦИАЛИЗАЦИЯ ==========
+
+async function initialize() {
+  try {
+    // Проверяем БД
+    const dbConnected = await database.checkConnection();
+    if (!dbConnected) {
+      logger.warn('База данных недоступна');
+    }
+    
+    // Устанавливаем вебхук
+    if (process.env.NODE_ENV === 'production') {
+      await bot.setWebHook(WEBHOOK_URL);
+      logger.info(`Webhook установлен: ${WEBHOOK_URL}`);
+    }
+    
+    // Получаем информацию о боте
+    const botInfo = await bot.getMe();
+    logger.info(`Бот запущен: @${botInfo.username} (${botInfo.id})`);
+    
+    console.log('\n✅ БОТ УСПЕШНО ЗАПУЩЕН');
+    console.log('=======================');
+    console.log(`🤖 Бот: @${botInfo.username}`);
+    console.log(`🌐 Webhook: ${WEBHOOK_URL}`);
+    console.log(`💾 БД: ${dbConnected ? 'Neon ✅' : '❌'}`);
+    console.log(`⚙️ Режим: ${process.env.NODE_ENV || 'development'}`);
+    console.log('=======================\n');
+    
+  } catch (error) {
+    logger.error('Ошибка инициализации:', error);
+    process.exit(1);
+  }
+}
+
+// Автоматическая инициализация при запуске
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   
-  // Установка вебхука
-  bot.setWebHook(WEBHOOK_URL).then(() => {
-    console.log(`✅ Вебхук установлен: ${WEBHOOK_URL}`);
-  }).catch(err => {
-    console.error('❌ Ошибка вебхука:', err.message);
+  app.listen(PORT, async () => {
+    console.log(`🚀 Server started on port ${PORT}`);
+    await initialize();
   });
-  
-  app.listen(PORT, () => {
-    console.log(`🚀 Сервер запущен на порту ${PORT}`);
-    console.log(`🌐 Webhook URL: ${WEBHOOK_URL}`);
-    console.log(`🤖 Токен бота: ${BOT_TOKEN ? 'Установлен ✅' : 'Отсутствует ❌'}`);
-  });
+} else {
+  // Для Vercel Serverless
+  module.exports = app;
 }
