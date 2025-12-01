@@ -3,20 +3,29 @@
     "api/bot.js": {
       "maxDuration": 10,
       "memory": 1024
+    },
+    "api/status.js": {
+      "maxDuration": 3,
+      "memory": 256
     }
   },
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" }
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
       ]
     }
   ],
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" },
+    { "source": "/status", "destination": "/api/status.js" },
     { "source": "/api/bot", "destination": "/api/bot.js" },
     { "source": "/webhook", "destination": "/api/bot.js" }
-  ]
+  ],
+  "env": {
+    "NODE_VERSION": "20"
+  }
 }
