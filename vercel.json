@@ -2,7 +2,7 @@
   "functions": {
     "api/bot.js": {
       "maxDuration": 10,
-      "runtime": "nodejs20.x"
+      "runtime": "nodejs24.x"
     }
   },
   "rewrites": [
