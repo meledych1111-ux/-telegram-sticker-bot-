@@ -1,0 +1,47 @@
+{
+  "name": "telegram-sticker-bot",
+  "version": "1.0.0",
+  "description": "Telegram бот для создания стикеров на Vercel с Node.js 24",
+  "main": "api/bot.js",
+  "scripts": {
+    "start": "node api/bot.js",
+    "dev": "vercel dev",
+    "deploy": "vercel --prod",
+    "setup": "node scripts/setup-webhook.js",
+    "init-db": "node scripts/init-db.js",
+    "test": "node --test tests/basic.test.js",
+    "lint": "npx --no-install eslint .",
+    "format": "npx --no-install prettier --write ."
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "type": "module",
+  "dependencies": {
+    "express": "^4.21.1",
+    "node-telegram-bot-api": "^0.66.0",
+    "cors": "^2.8.5",
+    "sharp": "^0.33.5",
+    "postgres": "^3.4.4",
+    "winston": "^3.15.0",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4",
+    "zod": "^3.23.8",
+    "nanoid": "^5.0.7"
+  },
+  "devDependencies": {
+    "eslint": "^9.10.0",
+    "prettier": "^3.3.3",
+    "@vercel/node": "^4.0.0"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "sticker",
+    "vercel",
+    "node24"
+  ],
+  "author": "Telegram Sticker Bot Team",
+  "license": "MIT"
+}
