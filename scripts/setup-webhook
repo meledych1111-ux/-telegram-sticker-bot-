@@ -2,6 +2,7 @@
 
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
+import { validateBotToken } from '../lib/utils.js';
 
 // Загружаем переменные окружения
 dotenv.config();
@@ -17,6 +18,11 @@ if (!BOT_TOKEN) {
   console.log('1. Получите токен у @BotFather');
   console.log('2. Добавьте в .env файл или переменные окружения Vercel');
   console.log('3. Формат: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz');
+  process.exit(1);
+}
+
+if (!validateBotToken(BOT_TOKEN)) {
+  console.error('❌ Неверный формат токена Telegram Bot');
   process.exit(1);
 }
 
@@ -72,12 +78,12 @@ async function setupWebhook() {
     console.log(`\n📱 Теперь откройте Telegram: https://t.me/${botInfo.username}`);
     console.log(`🔧 Для управления: ${VERCEL_URL}/api/setup-webhook`);
     
-  } catch (error) {
-    console.error(`\n❌ Ошибка настройки: ${error.message}`);
+  } catch (err) {
+    console.error(`\n❌ Ошибка настройки: ${err.message}`);
     
-    if (error.response) {
-      console.log(`Код ошибки: ${error.response.statusCode}`);
-      console.log(`Тело ответа: ${JSON.stringify(error.response.body)}`);
+    if (err.response) {
+      console.log(`Код ошибки: ${err.response.statusCode}`);
+      console.log(`Тело ответа: ${JSON.stringify(err.response.body)}`);
     }
     
     process.exit(1);
