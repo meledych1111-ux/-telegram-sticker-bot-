@@ -1,821 +1,398 @@
 require('dotenv').config();
-const { Telegraf, Markup, session } = require('telegraf');
-const db = require('../lib/database');
-const StickerManager = require('../lib/sticker-manager');
-const cache = require('../lib/cache');
-const config = require('../config/constants');
+const { Telegraf, Markup } = require('telegraf');
 
-// Проверка переменных окружения
-if (!process.env.BOT_TOKEN) {
-  console.error('❌ BOT_TOKEN is required!');
+const BOT_TOKEN = process.env.BOT_TOKEN;
+if (!BOT_TOKEN) {
+  console.error('❌ BOT_TOKEN required');
   process.exit(1);
 }
 
-// Инициализация
-const bot = new Telegraf(process.env.BOT_TOKEN);
-const stickerManager = new StickerManager(process.env.BOT_TOKEN);
+const bot = new Telegraf(BOT_TOKEN);
 
-// Настройка сессии
-bot.use(session({
-  ttl: config.SESSION.TTL,
-  getSessionKey: (ctx) => ctx.from?.id.toString()
-}));
+// ========== ГЛОБАЛЬНЫЕ КОНСТАНТЫ (без файлов) ==========
+const CONFIG = {
+  EFFECTS: ['none', 'grayscale', 'sepia', 'invert', 'blur', 'neon', 'gradient'],
+  FRAMES: ['none', 'circle', 'heart', 'star', 'rounded'],
+  MAX_SIZE: 512,
+  MAX_DURATION: 9000 // 9 секунд на обработку
+};
 
-// Инициализация сессии по умолчанию
-bot.use((ctx, next) => {
-  if (!ctx.session) {
-    ctx.session = {
-      step: 'idle',
-      photoFileId: null,
-      selectedEffect: config.EFFECTS.NONE,
-      selectedFrame: config.FRAMES.NONE,
-      textToAdd: null,
-      textPosition: config.TEXT_POSITIONS.BOTTOM,
-      processing: false,
-      lastActivity: Date.now()
+// ========== ПРОСТАЯ БАЗА ДАННЫХ В ПАМЯТИ (для демо) ==========
+const db = {
+  users: new Map(),
+  stickers: new Map(),
+  votes: new Map(),
+  
+  async getUser(userId) {
+    return this.users.get(userId) || { 
+      id: userId, 
+      rating: 100, 
+      stickers: 0, 
+      created: Date.now() 
     };
+  },
+  
+  async saveUser(user) {
+    const existing = await this.getUser(user.id);
+    this.users.set(user.id, { ...existing, ...user });
+    return this.users.get(user.id);
+  },
+  
+  async saveSticker(data) {
+    const sticker = {
+      id: Date.now().toString(),
+      ...data,
+      likes: 0,
+      created: Date.now()
+    };
+    this.stickers.set(sticker.id, sticker);
+    
+    // Обновляем пользователя
+    const user = await this.getUser(data.userId);
+    user.stickers = (user.stickers || 0) + 1;
+    user.rating = (user.rating || 100) + 10;
+    this.users.set(data.userId, user);
+    
+    return sticker;
+  },
+  
+  async getSticker(id) {
+    return this.stickers.get(id);
+  },
+  
+  async addVote(userId, stickerId, type) {
+    const key = `${userId}:${stickerId}`;
+    const sticker = await this.getSticker(stickerId);
+    
+    if (sticker) {
+      if (type === 'like') {
+        sticker.likes = (sticker.likes || 0) + 1;
+      }
+      this.stickers.set(stickerId, sticker);
+      this.votes.set(key, type);
+    }
+    
+    return sticker;
+  },
+  
+  async getTopStickers(limit = 10) {
+    return Array.from(this.stickers.values())
+      .sort((a, b) => (b.likes || 0) - (a.likes || 0))
+      .slice(0, limit);
   }
-  ctx.session.lastActivity = Date.now();
-  return next();
-});
+};
+
+// ========== ОПТИМИЗИРОВАННЫЙ IMAGE PROCESSOR ==========
+class FastImageProcessor {
+  constructor() {
+    this.sharp = require('sharp');
+    this.axios = require('axios');
+  }
+  
+  async createSticker(imageUrl, options = {}) {
+    const start = Date.now();
+    
+    try {
+      // 1. Скачиваем (таймаут 3 секунды)
+      const response = await this.axios({
+        url: imageUrl,
+        responseType: 'arraybuffer',
+        timeout: 3000,
+        maxContentLength: 5 * 1024 * 1024 // 5MB
+      });
+      
+      let image = this.sharp(response.data)
+        .resize(CONFIG.MAX_SIZE, CONFIG.MAX_SIZE, {
+          fit: 'contain',
+          background: { r: 0, g: 0, b: 0, alpha: 0 }
+        });
+      
+      // 2. Применяем эффект (максимум 2 секунды)
+      if (options.effect && options.effect !== 'none') {
+        image = this.applyEffect(image, options.effect);
+      }
+      
+      // 3. Добавляем рамку (максимум 2 секунды)
+      if (options.frame && options.frame !== 'none') {
+        image = await this.addFrame(image, options.frame);
+      }
+      
+      // 4. Возвращаем буфер
+      const buffer = await image.png().toBuffer();
+      
+      console.log(`✅ Sticker created in ${Date.now() - start}ms, ${buffer.length} bytes`);
+      return { success: true, buffer };
+      
+    } catch (error) {
+      console.error('Image processing error:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+  
+  applyEffect(image, effect) {
+    switch(effect) {
+      case 'grayscale': return image.grayscale();
+      case 'sepia': return image.recomb([[0.393,0.769,0.189],[0.349,0.686,0.168],[0.272,0.534,0.131]]);
+      case 'invert': return image.negate();
+      case 'blur': return image.blur(2);
+      case 'neon': return image.linear(1.2, -30);
+      case 'gradient': return image;
+      default: return image;
+    }
+  }
+  
+  async addFrame(image, frame) {
+    const metadata = await image.metadata();
+    
+    if (frame === 'circle') {
+      const mask = Buffer.from(`
+        <svg width="${metadata.width}" height="${metadata.height}">
+          <circle cx="${metadata.width/2}" cy="${metadata.height/2}" 
+                  r="${Math.min(metadata.width, metadata.height)/2}" fill="white"/>
+        </svg>
+      `);
+      return image.composite([{ input: mask, blend: 'dest-in' }]);
+    }
+    
+    return image;
+  }
+}
+
+const imageProcessor = new FastImageProcessor();
 
 // ========== КЛАВИАТУРЫ ==========
-const mainKeyboard = Markup.keyboard([
-  ['🎨 Создать стикер', '⭐ Мой профиль'],
-  ['🏆 Топ недели', '🔥 Тренды'],
-  ['🎲 Случайный', '❓ Помощь']
+const mainMenu = Markup.keyboard([
+  ['🎨 Быстрый стикер'],
+  ['⭐ Мой рейтинг', '🏆 Топ']
 ]).resize();
 
-const effectsKeyboard = Markup.inlineKeyboard([
-  [
-    Markup.button.callback('⚫ Ч/Б', 'effect_grayscale'),
-    Markup.button.callback('🟤 Сепия', 'effect_sepia')
-  ],
-  [
-    Markup.button.callback('🌈 Неон', 'effect_neon'),
-    Markup.button.callback('✨ Перламутр', 'effect_pearl')
-  ],
-  [
-    Markup.button.callback('🎨 Градиент', 'effect_gradient'),
-    Markup.button.callback('🌀 Пиксели', 'effect_pixelate')
-  ],
-  [
-    Markup.button.callback('📜 Винтаж', 'effect_vintage'),
-    Markup.button.callback('💫 Свечение', 'effect_glow')
-  ],
-  [
-    Markup.button.callback('🔄 Инверсия', 'effect_invert'),
-    Markup.button.callback('✏️ Эскиз', 'effect_sketch')
-  ],
-  [
-    Markup.button.callback('➡️ Далее', 'next_to_frames')
-  ]
+const effectsMenu = Markup.inlineKeyboard([
+  [Markup.button.callback('⚫ Ч/Б', 'effect_grayscale')],
+  [Markup.button.callback('🟤 Сепия', 'effect_sepia')],
+  [Markup.button.callback('🌈 Неон', 'effect_neon')],
+  [Markup.button.callback('🚀 Далее', 'next_frames')]
 ]);
 
-const framesKeyboard = Markup.inlineKeyboard([
-  [
-    Markup.button.callback('🔵 Круг', 'frame_circle'),
-    Markup.button.callback('💝 Сердце', 'frame_heart')
-  ],
-  [
-    Markup.button.callback('⭐ Звезда', 'frame_star'),
-    Markup.button.callback('🔲 Скругл.', 'frame_rounded')
-  ],
-  [
-    Markup.button.callback('💎 Алмаз', 'frame_diamond'),
-    Markup.button.callback('⬢ Шестиуг.', 'frame_hexagon')
-  ],
-  [
-    Markup.button.callback('☁️ Облако', 'frame_cloud'),
-    Markup.button.callback('📐 Без рамки', 'frame_none')
-  ],
-  [
-    Markup.button.callback('➡️ Далее', 'next_to_text')
-  ]
-]);
-
-const textKeyboard = Markup.inlineKeyboard([
-  [
-    Markup.button.callback('📝 Добавить текст', 'add_text'),
-    Markup.button.callback('❌ Без текста', 'skip_text')
-  ],
-  [
-    Markup.button.callback('⬆️ Вверху', 'text_top'),
-    Markup.button.callback('⏺️ По центру', 'text_center'),
-    Markup.button.callback('⬇️ Внизу', 'text_bottom')
-  ],
-  [
-    Markup.button.callback('🚀 Создать!', 'create_sticker')
-  ]
-]);
-
-const voteKeyboard = (fileId, likes = 0) => Markup.inlineKeyboard([
-  [
-    Markup.button.callback(`👍 ${likes}`, `vote_like_${fileId}`),
-    Markup.button.callback('👎', `vote_dislike_${fileId}`)
-  ],
-  [
-    Markup.button.callback('📊 Статистика', `stats_${fileId}`),
-    Markup.button.callback('🎨 Новый', 'new_sticker')
-  ]
+const framesMenu = Markup.inlineKeyboard([
+  [Markup.button.callback('🔵 Круг', 'frame_circle')],
+  [Markup.button.callback('💝 Сердце', 'frame_heart')],
+  [Markup.button.callback('⭐ Звезда', 'frame_star')],
+  [Markup.button.callback('✅ Создать', 'create_sticker')]
 ]);
 
 // ========== КОМАНДЫ ==========
 bot.start(async (ctx) => {
-  await db.createUser(ctx.from);
-  const user = await db.getUser(ctx.from.id);
+  await db.saveUser(ctx.from);
   
-  await ctx.replyWithPhoto(
-    'https://images.unsplash.com/photo-1611605698335-8b1569810432?w=800&q=80',
-    {
-      caption: config.MESSAGES.WELCOME + `\n\n` +
-               `👤 *Твой профиль:*\n` +
-               `⭐ Рейтинг: ${user.rating || 100}\n` +
-               `🎨 Стикеров: ${user.stickers_created || 0}\n` +
-               `📊 Уровень: ${Math.floor((user.rating || 100) / 100)}`,
-      parse_mode: 'Markdown',
-      ...mainKeyboard
-    }
+  await ctx.reply(
+    `🎨 *Sticker Bot*\n\n` +
+    `Создавай стикеры за 10 секунд!\n` +
+    `Эффекты: Ч/Б, Сепия, Неон\n` +
+    `Рамки: Круг, Сердце, Звезда\n\n` +
+    `*Нажми кнопку ниже:*`,
+    { parse_mode: 'Markdown', ...mainMenu }
   );
 });
 
-bot.help((ctx) => {
-  ctx.reply(config.MESSAGES.HELP, {
-    parse_mode: 'Markdown',
-    ...mainKeyboard
-  });
-});
-
-bot.command('create', (ctx) => {
-  ctx.session.step = 'awaiting_photo';
+bot.hears('🎨 Быстрый стикер', (ctx) => {
   ctx.reply(
-    '📸 *Отправь мне фото для создания стикера!*\n\n' +
-    'Поддерживаемые форматы:\n' +
-    '• JPG, PNG, WebP\n' +
-    '• Макс. размер: 10 MB\n\n' +
-    '_Лучше всего подходят квадратные фото_',
+    '📸 *Отправь квадратное фото*\n\nЛучший размер: 512x512\nФормат: JPG/PNG\n\n_Обработка займет 5-10 секунд_',
     { parse_mode: 'Markdown' }
   );
 });
 
-bot.command('profile', async (ctx) => {
-  const stats = await db.getUserStats(ctx.from.id);
-  const rank = await db.getUserRank(ctx.from.id);
-  
-  const message = `
-🏆 *Твой профиль*
-
-👤 *Имя:* ${ctx.from.first_name} ${ctx.from.last_name || ''}
-⭐ *Рейтинг:* ${stats.rating || 100}
-📊 *Ранг:* #${rank || '?'}
-🎨 *Стикеров:* ${stats.stickers_created || 0}
-👍 *Лайков:* ${stats.total_likes || 0}
-📈 *Средний рейтинг:* ${Math.round((stats.avg_likes || 0) * 10) / 10}
-
-*Уровень:* ${Math.floor((stats.rating || 100) / 100)} ⭐
-*До след. уровня:* ${100 - ((stats.rating || 100) % 100)} очков
-  `;
-  
-  await ctx.reply(message, {
-    parse_mode: 'Markdown',
-    ...mainKeyboard
-  });
-});
-
-bot.command('top', async (ctx) => {
-  const topStickers = await db.getTopStickers(config.PAGINATION.TOP_STICKERS);
-  
-  if (topStickers.length === 0) {
-    return ctx.reply('😢 Пока нет стикеров. Будь первым!', mainKeyboard);
-  }
-  
-  let message = '🏆 *Топ стикеров недели*\n\n';
-  
-  topStickers.forEach((sticker, index) => {
-    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-    const username = sticker.username || sticker.first_name || 'Аноним';
-    const engagement = sticker.popularity ? Math.round(sticker.popularity) : 0;
-    
-    message += `${medals[index] || '🎨'} @${username}\n`;
-    message += `   👍 ${sticker.likes} • 📊 ${engagement}%\n`;
-    message += `   ✨ ${sticker.effect || 'без эффекта'}\n\n`;
-  });
-  
-  await ctx.reply(message, {
-    parse_mode: 'Markdown',
-    ...mainKeyboard
-  });
-});
-
-bot.command('rating', async (ctx) => {
-  const topUsers = await db.getTopUsers(config.PAGINATION.TOP_USERS);
-  
-  let message = '👑 *Топ пользователей*\n\n';
-  
-  topUsers.forEach((user, index) => {
-    const medals = ['👑', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-    const username = user.username || user.first_name || 'Аноним';
-    
-    message += `${medals[index] || '👤'} *${username}*\n`;
-    message += `   ⭐ Рейтинг: ${user.rating}\n`;
-    message += `   🎨 Стикеров: ${user.sticker_count || 0}\n`;
-    message += `   👍 Лайков: ${user.total_likes || 0}\n\n`;
-  });
-  
-  await ctx.reply(message, {
-    parse_mode: 'Markdown',
-    ...mainKeyboard
-  });
-});
-
-bot.command('trending', async (ctx) => {
-  const trending = await db.getTrendingStickers(config.PAGINATION.TRENDING);
-  
-  if (trending.length === 0) {
-    return ctx.reply('😢 Пока нет трендов. Создай стикер!', mainKeyboard);
-  }
-  
-  let message = '🔥 *Тренды сейчас*\n\n';
-  
-  trending.forEach((sticker, index) => {
-    const fires = ['🔥', '🔥', '🔥', '🔥', '🔥', '🔥', '🔥', '🔥', '🔥', '🔥'];
-    const username = sticker.username || sticker.first_name || 'Аноним';
-    const trendScore = Math.round((sticker.trend_score || 0) * 100);
-    
-    message += `${fires[index] || '📈'} ${sticker.effect || 'Без эффекта'}\n`;
-    message += `   👤 @${username}\n`;
-    message += `   📈 Тренд: ${trendScore}%\n\n`;
-  });
-  
-  await ctx.reply(message, {
-    parse_mode: 'Markdown',
-    ...mainKeyboard
-  });
-});
-
-// ========== ОБРАБОТКА СООБЩЕНИЙ ==========
-bot.hears('🎨 Создать стикер', (ctx) => {
-  ctx.session.step = 'awaiting_photo';
-  ctx.reply(
-    '📸 *Отправь мне фото для создания стикера!*\n\n' +
-    'Поддерживаемые форматы:\n' +
-    '• JPG, PNG, WebP\n' +
-    '• Макс. размер: 10 MB\n\n' +
-    '_Лучше всего подходят квадратные фото_',
-    { parse_mode: 'Markdown' }
-  );
-});
-
-bot.hears('⭐ Мой профиль', async (ctx) => {
-  await ctx.reply('Загружаю профиль... ⏳');
-  ctx.telegram.callApi('getMe').then(async (botInfo) => {
-    const stats = await db.getUserStats(ctx.from.id);
-    const rank = await db.getUserRank(ctx.from.id);
-    
-    const message = `
-🏆 *Твой профиль*
-
-👤 *Имя:* ${ctx.from.first_name} ${ctx.from.last_name || ''}
-⭐ *Рейтинг:* ${stats.rating || 100}
-📊 *Ранг:* #${rank || '?'}
-🎨 *Стикеров:* ${stats.stickers_created || 0}
-👍 *Лайков:* ${stats.total_likes || 0}
-📈 *Средний рейтинг:* ${Math.round((stats.avg_likes || 0) * 10) / 10}
-
-*Уровень:* ${Math.floor((stats.rating || 100) / 100)} ⭐
-*До след. уровня:* ${100 - ((stats.rating || 100) % 100)} очков
-
-🤖 *Бот:* @${botInfo.username}
-    `;
-    
-    await ctx.reply(message, {
-      parse_mode: 'Markdown',
-      ...mainKeyboard
-    });
-  });
-});
-
-bot.hears('🏆 Топ недели', async (ctx) => {
-  await ctx.reply('Загружаю топ... ⏳');
-  await ctx.replyWithChatAction('typing');
-  
-  const topStickers = await db.getTopStickers(config.PAGINATION.TOP_STICKERS);
-  
-  if (topStickers.length === 0) {
-    return ctx.reply('😢 Пока нет стикеров. Будь первым!', mainKeyboard);
-  }
-  
-  // Отправляем первые 3 стикера
-  for (let i = 0; i < Math.min(3, topStickers.length); i++) {
-    const sticker = topStickers[i];
-    try {
-      await ctx.replyWithPhoto(sticker.file_id, {
-        caption: `🏆 #${i + 1} • 👍 ${sticker.likes}\n` +
-                 `👤 ${sticker.username || sticker.first_name}`,
-        reply_markup: voteKeyboard(sticker.file_id, sticker.likes).reply_markup
-      });
-      await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (error) {
-      console.error('Error sending top sticker:', error);
-    }
-  }
-  
-  if (topStickers.length > 3) {
-    await ctx.reply(
-      `И еще ${topStickers.length - 3} стикеров в топе!\n` +
-      `Используй /top для полного списка`,
-      mainKeyboard
-    );
-  }
-});
-
-bot.hears('🔥 Тренды', async (ctx) => {
-  const trending = await db.getTrendingStickers(config.PAGINATION.TRENDING);
-  
-  if (trending.length === 0) {
-    return ctx.reply('😢 Пока нет трендов. Создай стикер!', mainKeyboard);
-  }
-  
-  let message = '🔥 *Тренды сейчас*\n\n';
-  
-  trending.slice(0, 5).forEach((sticker, index) => {
-    const fires = ['🔥', '🔥', '🔥', '🔥', '🔥'];
-    const username = sticker.username || sticker.first_name || 'Аноним';
-    const trendScore = Math.round((sticker.trend_score || 0) * 100);
-    
-    message += `${fires[index] || '📈'} ${sticker.effect || 'Без эффекта'}\n`;
-    message += `   👤 @${username}\n`;
-    message += `   📈 Тренд: ${trendScore}%\n\n`;
-  });
-  
-  await ctx.reply(message, {
-    parse_mode: 'Markdown',
-    ...mainKeyboard
-  });
-});
-
-bot.hears('🎲 Случайный', async (ctx) => {
-  const stickers = await db.getTopStickers(50);
-  
-  if (stickers.length === 0) {
-    return ctx.reply('😢 Пока нет стикеров. Создай первый!', mainKeyboard);
-  }
-  
-  const randomSticker = stickers[Math.floor(Math.random() * stickers.length)];
-  
-  try {
-    await ctx.replyWithPhoto(randomSticker.file_id, {
-      caption: `🎲 *Случайный стикер*\n\n` +
-               `👤 Автор: @${randomSticker.username || 'anon'}\n` +
-               `✨ Эффект: ${randomSticker.effect || 'нет'}\n` +
-               `👍 Лайков: ${randomSticker.likes}\n\n` +
-               `_Оцени стикер кнопками ниже 👇_`,
-      parse_mode: 'Markdown',
-      reply_markup: voteKeyboard(randomSticker.file_id, randomSticker.likes).reply_markup
-    });
-  } catch (error) {
-    console.error('Error sending random sticker:', error);
-    ctx.reply('❌ Не удалось загрузить стикер', mainKeyboard);
-  }
-});
-
-bot.hears('❓ Помощь', (ctx) => {
-  ctx.reply(config.MESSAGES.HELP, {
-    parse_mode: 'Markdown',
-    ...mainKeyboard
-  });
-});
-
-// ========== ОБРАБОТКА ФОТО ==========
 bot.on('photo', async (ctx) => {
-  if (ctx.session.step !== 'awaiting_photo') {
-    return;
-  }
-  
   try {
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
-    ctx.session.photoFileId = photo.file_id;
-    ctx.session.step = 'choosing_effect';
+    const file = await ctx.telegram.getFile(photo.file_id);
+    const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file.file_path}`;
     
-    // Получаем превью фото
-    const file = await stickerManager.getFile(photo.file_id);
-    const fileUrl = await stickerManager.getFileUrl(photo.file_id);
+    // Сохраняем в сессии
+    ctx.session = ctx.session || {};
+    ctx.session.photoUrl = fileUrl;
     
     await ctx.replyWithPhoto(
       { url: fileUrl },
       {
-        caption: '✅ *Фото получено!*\n\nВыбери эффект для стикера:',
-        parse_mode: 'Markdown',
-        ...effectsKeyboard
+        caption: '✅ Фото получено! Выбери эффект:',
+        ...effectsMenu
       }
     );
+    
   } catch (error) {
-    console.error('Error processing photo:', error);
-    ctx.reply('❌ Ошибка при обработке фото', mainKeyboard);
-    ctx.session.step = 'idle';
+    console.error('Photo error:', error);
+    ctx.reply('❌ Ошибка загрузки фото', mainMenu);
   }
 });
 
-// ========== ОБРАБОТКА КНОПОК ==========
-// Выбор эффекта
+// Эффекты
 bot.action(/effect_(.+)/, async (ctx) => {
-  if (ctx.session.step !== 'choosing_effect') {
-    return ctx.answerCbQuery('❌ Сначала отправь фото');
-  }
+  ctx.session = ctx.session || {};
+  ctx.session.effect = ctx.match[1];
   
-  const effect = ctx.match[1];
-  ctx.session.selectedEffect = effect;
-  
-  await ctx.answerCbQuery(`✅ Выбран: ${effect}`);
-  
-  // Показываем предпросмотр с эффектом
-  try {
-    const fileUrl = await stickerManager.getFileUrl(ctx.session.photoFileId);
-    const imageBuffer = await require('../lib/image-processor').downloadImage(fileUrl);
-    const preview = await require('../lib/image-processor').createPreview(imageBuffer, effect);
-    
-    await ctx.editMessageMedia({
-      type: 'photo',
-      media: { source: preview },
-      caption: `✨ *Эффект: ${effect}*\n\nВыбери рамку для стикера:`,
-      parse_mode: 'Markdown'
-    }, framesKeyboard);
-  } catch (error) {
-    console.error('Error showing effect preview:', error);
-    await ctx.answerCbQuery('❌ Ошибка предпросмотра');
-  }
+  await ctx.answerCbQuery(`✅ ${ctx.match[1]}`);
+  await ctx.editMessageCaption('Выбери рамку:', framesMenu);
 });
 
-// Выбор рамки
+bot.action('next_frames', (ctx) => {
+  ctx.editMessageCaption('Выбери рамку:', framesMenu);
+});
+
+// Рамки
 bot.action(/frame_(.+)/, async (ctx) => {
-  if (!ctx.session.selectedEffect) {
-    return ctx.answerCbQuery('❌ Сначала выбери эффект');
-  }
+  ctx.session = ctx.session || {};
+  ctx.session.frame = ctx.match[1];
   
-  const frame = ctx.match[1];
-  ctx.session.selectedFrame = frame;
+  await ctx.answerCbQuery(`✅ ${ctx.match[1]}`);
   
-  await ctx.answerCbQuery(`✅ Выбрана рамка: ${frame}`);
-  
-  // Показываем предпросмотр с рамкой
-  try {
-    const fileUrl = await stickerManager.getFileUrl(ctx.session.photoFileId);
-    const imageBuffer = await require('../lib/image-processor').downloadImage(fileUrl);
-    const imageProcessor = require('../lib/image-processor');
-    
-    const preview = await imageProcessor.createSticker(imageBuffer, {
-      effect: ctx.session.selectedEffect,
-      frame: frame,
-      text: null
-    });
-    
-    await ctx.editMessageMedia({
-      type: 'photo',
-      media: { source: preview },
-      caption: `🖼️ *Рамка: ${frame}*\n\nДобавить текст к стикеру?`,
-      parse_mode: 'Markdown'
-    }, textKeyboard);
-  } catch (error) {
-    console.error('Error showing frame preview:', error);
-    await ctx.answerCbQuery('❌ Ошибка предпросмотра');
-  }
-});
-
-// Навигация
-bot.action('next_to_frames', async (ctx) => {
-  if (!ctx.session.selectedEffect) {
-    return ctx.answerCbQuery('❌ Сначала выбери эффект');
-  }
-  
-  await ctx.editMessageCaption('Выбери рамку для стикера:', framesKeyboard);
-  await ctx.answerCbQuery();
-});
-
-bot.action('next_to_text', async (ctx) => {
-  if (!ctx.session.selectedEffect || !ctx.session.selectedFrame) {
-    return ctx.answerCbQuery('❌ Сначала выбери эффект и рамку');
-  }
-  
-  await ctx.editMessageCaption('Добавить текст к стикеру?', textKeyboard);
-  await ctx.answerCbQuery();
-});
-
-// Текст
-bot.action('add_text', async (ctx) => {
-  ctx.session.step = 'awaiting_text';
-  await ctx.reply('✏️ *Введи текст для стикера:*\n\nМаксимум 30 символов', {
-    parse_mode: 'Markdown'
-  });
-  await ctx.answerCbQuery();
-});
-
-bot.action('skip_text', async (ctx) => {
-  ctx.session.textToAdd = null;
-  await ctx.editMessageCaption(
-    '✅ Текст не будет добавлен\n\nНажми "🚀 Создать!" для создания стикера',
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🚀 Создать стикер!', 'create_sticker')]
-    ])
-  );
-  await ctx.answerCbQuery();
-});
-
-bot.action(/text_(top|center|bottom)/, async (ctx) => {
-  const position = ctx.match[1];
-  ctx.session.textPosition = position;
-  await ctx.answerCbQuery(`✅ Позиция текста: ${position}`);
-});
-
-// Получение текста от пользователя
-bot.on('text', async (ctx) => {
-  if (ctx.session.step === 'awaiting_text') {
-    const text = ctx.message.text;
-    
-    if (text.length > config.LIMITS.TEXT_LENGTH) {
-      return ctx.reply(`❌ Слишком длинный текст! Максимум ${config.LIMITS.TEXT_LENGTH} символов`);
-    }
-    
-    ctx.session.textToAdd = text;
-    ctx.session.step = 'ready_to_create';
-    
-    // Показываем финальный предпросмотр
-    try {
-      const fileUrl = await stickerManager.getFileUrl(ctx.session.photoFileId);
-      const imageBuffer = await require('../lib/image-processor').downloadImage(fileUrl);
-      const imageProcessor = require('../lib/image-processor');
-      
-      const preview = await imageProcessor.createSticker(imageBuffer, {
-        effect: ctx.session.selectedEffect,
-        frame: ctx.session.selectedFrame,
-        text: text,
-        textPosition: ctx.session.textPosition
-      });
-      
-      await ctx.replyWithPhoto(
-        { source: preview },
-        {
-          caption: `✅ *Финальный предпросмотр*\n\n` +
-                   `✨ Эффект: ${ctx.session.selectedEffect}\n` +
-                   `🖼️ Рамка: ${ctx.session.selectedFrame}\n` +
-                   `📝 Текст: "${text}"\n\n` +
-                   `Нажми кнопку для создания:`,
-          parse_mode: 'Markdown',
-          reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback('🚀 Создать стикер!', 'create_sticker')]
-          ]).reply_markup
-        }
-      );
-    } catch (error) {
-      console.error('Error showing final preview:', error);
-      ctx.reply('❌ Ошибка при создании предпросмотра', mainKeyboard);
-    }
-  }
+  // Сразу создаем стикер
+  await createSticker(ctx);
 });
 
 // Создание стикера
-bot.action('create_sticker', async (ctx) => {
-  if (!ctx.session.photoFileId) {
-    return ctx.answerCbQuery('❌ Нет фото для обработки');
+async function createSticker(ctx) {
+  const session = ctx.session || {};
+  
+  if (!session.photoUrl) {
+    return ctx.answerCbQuery('❌ Нет фото');
   }
   
-  ctx.session.processing = true;
+  await ctx.editMessageCaption('🎨 Создаю стикер... ⏳');
   
-  await ctx.editMessageCaption('🎨 *Создаю стикер...*\n\nЭто займет несколько секунд ⏳', {
-    parse_mode: 'Markdown'
-  });
+  const startTime = Date.now();
   
   try {
-    const result = await stickerManager.processAndSaveSticker(
-      ctx.from.id,
-      ctx.session.photoFileId,
-      {
-        effect: ctx.session.selectedEffect,
-        frame: ctx.session.selectedFrame,
-        text: ctx.session.textToAdd,
-        textPosition: ctx.session.textPosition
-      }
-    );
+    // Создаем стикер
+    const result = await imageProcessor.createSticker(session.photoUrl, {
+      effect: session.effect || 'none',
+      frame: session.frame || 'none'
+    });
     
     if (!result.success) {
       throw new Error(result.error);
     }
     
-    // Отправляем сообщение об успехе
-    await ctx.reply(
-      `✅ *Стикер успешно создан!*\n\n` +
-      `✨ Эффект: ${ctx.session.selectedEffect}\n` +
-      `🖼️ Рамка: ${ctx.session.selectedFrame}\n` +
-      `${ctx.session.textToAdd ? `📝 Текст: "${ctx.session.textToAdd}"\n` : ''}` +
-      `⭐ +${config.RATING.CREATE_STICKER} к рейтингу\n` +
-      `⏱️ Обработано за ${result.processingTime}ms\n\n` +
-      `_Оцени стикер других пользователей!_`,
-      {
-        parse_mode: 'Markdown',
-        ...mainKeyboard
-      }
-    );
-    
-    // Сбрасываем сессию
-    ctx.session.step = 'idle';
-    ctx.session.photoFileId = null;
-    ctx.session.selectedEffect = config.EFFECTS.NONE;
-    ctx.session.selectedFrame = config.FRAMES.NONE;
-    ctx.session.textToAdd = null;
-    ctx.session.textPosition = config.TEXT_POSITIONS.BOTTOM;
-    ctx.session.processing = false;
-    
-  } catch (error) {
-    console.error('Error creating sticker:', error);
-    await ctx.reply(
-      `❌ *Ошибка при создании стикера*\n\n` +
-      `Причина: ${error.message || 'Неизвестная ошибка'}\n\n` +
-      `Попробуй:\n` +
-      `• Другое фото\n` +
-      `• Уменьшить размер фото\n` +
-      `• Более простые эффекты`,
-      {
-        parse_mode: 'Markdown',
-        ...mainKeyboard
-      }
-    );
-    
-    ctx.session.step = 'idle';
-    ctx.session.processing = false;
-  }
-});
-
-// Голосование за стикеры
-bot.action(/vote_(like|dislike)_(.+)/, async (ctx) => {
-  const voteType = ctx.match[1];
-  const stickerFileId = ctx.match[2];
-  
-  const result = await stickerManager.addVoteToSticker(
-    ctx.from.id,
-    stickerFileId,
-    voteType
-  );
-  
-  if (!result.success) {
-    return ctx.answerCbQuery(result.error);
-  }
-  
-  await ctx.answerCbQuery(`✅ Твой ${voteType === 'like' ? '👍' : '👎'} учтен!`);
-  
-  // Обновляем клавиатуру с новыми счетчиками
-  await ctx.editMessageReplyMarkup(
-    voteKeyboard(stickerFileId, result.sticker.likes).reply_markup
-  );
-});
-
-// Новая кнопка
-bot.action('new_sticker', (ctx) => {
-  ctx.session.step = 'awaiting_photo';
-  ctx.reply('📸 Отправь фото для нового стикера:', mainKeyboard);
-  ctx.answerCbQuery();
-});
-
-// Статистика стикера
-bot.action(/stats_(.+)/, async (ctx) => {
-  const stickerFileId = ctx.match[1];
-  const stickerInfo = await stickerManager.getStickerInfo(stickerFileId);
-  
-  if (!stickerInfo) {
-    return ctx.answerCbQuery('❌ Стикер не найден');
-  }
-  
-  const message = `
-📊 *Статистика стикера*
-
-🎨 ID: ${stickerInfo.id}
-✨ Эффект: ${stickerInfo.effect}
-🖼️ Рамка: ${stickerInfo.frame}
-📝 Текст: ${stickerInfo.hasText ? '✅' : '❌'}
-${stickerInfo.text ? `   "${stickerInfo.text}"\n` : ''}
-
-👍 Лайков: ${stickerInfo.likes}
-👀 Просмотров: ${stickerInfo.views}
-📈 Вовлеченность: ${Math.round(stickerInfo.engagement)}%
-
-👤 Автор: ${stickerInfo.author.username || stickerInfo.author.firstName}
-⭐ Рейтинг автора: ${stickerInfo.author.rating}
-
-📅 Создан: ${new Date(stickerInfo.created).toLocaleDateString('ru-RU')}
-  `;
-  
-  await ctx.answerCbQuery();
-  await ctx.reply(message, { parse_mode: 'Markdown' });
-});
-
-// ========== АДМИН КОМАНДЫ ==========
-const ADMIN_IDS = process.env.ADMIN_IDS 
-  ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id.trim()))
-  : [];
-
-if (ADMIN_IDS.length > 0 && process.env.ENABLE_ADMIN_COMMANDS === 'true') {
-  bot.command('admin', async (ctx) => {
-    if (!ADMIN_IDS.includes(ctx.from.id)) {
-      return ctx.reply('❌ Доступ запрещен');
+    // Проверяем время
+    const elapsed = Date.now() - startTime;
+    if (elapsed > CONFIG.MAX_DURATION) {
+      throw new Error(`Timeout: ${elapsed}ms > ${CONFIG.MAX_DURATION}ms`);
     }
     
-    const stats = await db.getBotStats();
+    // Отправляем как фото (быстрее чем стикер)
+    const message = await ctx.replyWithPhoto(
+      { source: result.buffer },
+      {
+        caption: `✅ Готово! (${elapsed}ms)\n✨ ${session.effect || 'нет'}\n🖼️ ${session.frame || 'нет'}`,
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('👍', `like_${startTime}`)]
+        ])
+      }
+    );
     
-    const message = `
-👑 *Панель администратора*
-
-👥 Пользователей: ${stats.total_users}
-🎨 Стикеров: ${stats.total_stickers}
-👍 Голосов: ${stats.total_votes}
-🔥 Активных сегодня: ${stats.daily_active_users}
-⭐ Всего лайков: ${stats.total_likes}
-
-📊 *Кэш:*
-${Object.entries(cache.getStats()).map(([key, value]) => `  ${key}: ${value}`).join('\n')}
-
-⚙️ *Система:*
-  Память: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB
-  Uptime: ${Math.floor(process.uptime() / 60)} мин.
-  `;
-    
-    await ctx.reply(message, {
-      parse_mode: 'Markdown',
-      ...Markup.keyboard([
-        ['📊 Статистика', '🔄 Очистить кэш'],
-        ['📢 Рассылка', '🔙 Назад']
-      ]).resize()
+    // Сохраняем в "базу"
+    await db.saveSticker({
+      userId: ctx.from.id,
+      fileId: message.photo[message.photo.length - 1].file_id,
+      effect: session.effect,
+      frame: session.frame
     });
-  });
-  
-  bot.hears('📊 Статистика', async (ctx) => {
-    if (!ADMIN_IDS.includes(ctx.from.id)) return;
     
-    const stats = await db.getBotStats();
+    // Очищаем сессию
+    ctx.session = {};
+    
+  } catch (error) {
+    console.error('Sticker creation failed:', error);
     await ctx.reply(
-      `📈 Статистика бота:\n\n` +
-      `Пользователи: ${stats.total_users}\n` +
-      `Стикеры: ${stats.total_stickers}\n` +
-      `Активные: ${stats.daily_active_users}`,
-      mainKeyboard
+      `❌ Ошибка: ${error.message || 'timeout'}\n\n` +
+      `Попробуй:\n• Меньше фото\n• Без эффектов\n• Квадратное фото`,
+      mainMenu
     );
-  });
+    
+    ctx.session = {};
+  }
 }
 
-// ========== ОБРАБОТКА ОШИБОК ==========
-bot.catch((err, ctx) => {
-  console.error(`❌ Error for ${ctx.updateType}:`, err);
+bot.action('create_sticker', async (ctx) => {
+  await createSticker(ctx);
+});
+
+// Голосование
+bot.action(/like_(.+)/, async (ctx) => {
+  const stickerId = ctx.match[1];
+  const sticker = await db.getSticker(stickerId);
   
-  try {
-    ctx.reply(
-      '❌ Произошла ошибка. Пожалуйста, попробуй еще раз.\n\n' +
-      'Если ошибка повторяется, сообщи администратору.',
-      mainKeyboard
+  if (sticker) {
+    await db.addVote(ctx.from.id, stickerId, 'like');
+    await ctx.answerCbQuery('✅ Спасибо за лайк!');
+    
+    await ctx.editMessageCaption(
+      `${sticker.caption || 'Стикер'}\n👍 ${sticker.likes + 1}`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback(`👍 ${sticker.likes + 1}`, `like_${stickerId}`)]
+      ])
     );
-  } catch (e) {
-    console.error('Failed to send error message:', e);
   }
 });
 
-// ========== ЗАПУСК БОТА ==========
-async function startBot() {
+// Профиль
+bot.hears('⭐ Мой рейтинг', async (ctx) => {
+  const user = await db.getUser(ctx.from.id);
+  
+  await ctx.reply(
+    `🏆 *Твой профиль*\n\n` +
+    `👤 ${ctx.from.first_name}\n` +
+    `⭐ Рейтинг: ${user.rating}\n` +
+    `🎨 Стикеров: ${user.stickers || 0}\n\n` +
+    `_Создай больше стикеров!_`,
+    { parse_mode: 'Markdown', ...mainMenu }
+  );
+});
+
+// Топ
+bot.hears('🏆 Топ', async (ctx) => {
+  const topStickers = await db.getTopStickers(5);
+  
+  if (topStickers.length === 0) {
+    return ctx.reply('😢 Пока нет стикеров', mainMenu);
+  }
+  
+  let message = '🏆 *Топ стикеров*\n\n';
+  
+  topStickers.forEach((sticker, i) => {
+    message += `${['🥇','🥈','🥉','4️⃣','5️⃣'][i] || '🎨'} `;
+    message += `👍 ${sticker.likes || 0}\n`;
+  });
+  
+  await ctx.reply(message, { parse_mode: 'Markdown', ...mainMenu });
+});
+
+// ========== ОБРАБОТКА ДЛЯ VERCEL ==========
+module.exports = async (req, res) => {
+  // Начинаем обработку сразу
+  res.setHeader('Content-Type', 'application/json');
+  
   try {
-    // Инициализация базы данных
-    await db.init();
-    console.log('✅ Database connected');
-    
-    // Для Vercel
-    if (process.env.VERCEL) {
-      module.exports = async (req, res) => {
-        try {
-          if (req.method === 'POST') {
-            await bot.handleUpdate(req.body, res);
-          } else {
-            res.status(200).json({
-              status: 'ok',
-              service: 'Telegram Sticker Bot',
-              version: '2.0.0',
-              timestamp: new Date().toISOString(),
-              stats: await db.getBotStats()
-            });
-          }
-        } catch (error) {
-          console.error('Webhook error:', error);
-          res.status(200).end();
-        }
-      };
-      
-      console.log('🤖 Bot ready for Vercel serverless');
+    // Проверяем метод
+    if (req.method === 'POST') {
+      // Быстро обрабатываем update
+      await bot.handleUpdate(req.body, res);
     } else {
-      // Локальный запуск
-      bot.launch();
-      console.log('🤖 Bot started in polling mode');
-      
-      process.once('SIGINT', () => bot.stop('SIGINT'));
-      process.once('SIGTERM', () => bot.stop('SIGTERM'));
+      // Статус для GET запросов
+      res.status(200).json({
+        status: 'ok',
+        bot: 'running',
+        memory: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,
+        uptime: Math.floor(process.uptime())
+      });
     }
   } catch (error) {
-    console.error('❌ Failed to start bot:', error);
-    process.exit(1);
+    console.error('Handler error:', error);
+    res.status(200).json({ error: 'handled' });
   }
-}
+};
 
-// Запускаем бота
-startBot();
+// Локальный запуск
+if (require.main === module) {
+  bot.launch();
+  console.log('Bot started locally');
+}
