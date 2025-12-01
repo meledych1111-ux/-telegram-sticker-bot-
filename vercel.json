@@ -1,13 +1,12 @@
 {
   "version": 3,
-  "buildCommand": "npm run build",
+  "buildCommand": "npm install",
   "installCommand": "npm install",
-  "framework": null,
-  "outputDirectory": null,
   "functions": {
     "api/*.js": {
       "maxDuration": 30,
-      "memory": 1024
+      "memory": 1024,
+      "runtime": "nodejs24.x"
     }
   },
   "env": {
