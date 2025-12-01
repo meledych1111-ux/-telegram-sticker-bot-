@@ -92,4 +92,29 @@ async function setupWebhook() {
     console.log('1. Неверный токен бота - проверьте в @BotFather');
     console.log('2. Бот заблокирован - проверьте статус бота');
     console.log('3. Проблемы с сетью - проверьте интернет соединение');
-    console.log('4. URL недоступен - убедитесь что Vercel проект
+    console.log('4. URL недоступен - убедитесь что Vercel проект работает');
+    
+    if (error.response) {
+      console.log('\n📡 Ответ от Telegram API:', JSON.stringify(error.response.body, null, 2));
+    }
+    
+    process.exit(1);
+  }
+}
+
+function showSuccess(botInfo) {
+  console.log('\n🎉 НАСТРОЙКА ЗАВЕРШЕНА УСПЕШНО!');
+  console.log('=' .repeat(50));
+  console.log(`\n📱 Ссылка на бота: https://t.me/${botInfo.username}`);
+  console.log(`🌐 Webhook URL: ${webhookUrl}`);
+  console.log(`🔧 Проверка: ${vercelUrl}/api/check-env`);
+  console.log(`\n💡 Тестирование:`);
+  console.log('1. Откройте бота в Telegram');
+  console.log('2. Напишите /start');
+  console.log('3. Отправьте изображение для создания стикера');
+  console.log('\n' + '=' .repeat(50));
+  console.log('\n✅ Готово! Бот настроен и готов к работе.\n');
+}
+
+// Запускаем настройку
+setupWebhook();
