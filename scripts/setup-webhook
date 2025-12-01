@@ -1,92 +1,88 @@
 #!/usr/bin/env node
 
-// Скрипт для настройки вебхука
-const TelegramBot = require('node-telegram-bot-api');
+import TelegramBot from 'node-telegram-bot-api';
+import dotenv from 'dotenv';
+
+// Загружаем переменные окружения
+dotenv.config();
+
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const VERCEL_URL = process.env.VERCEL_URL || 'https://telegram-sticker-bot.vercel.app';
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'sticker-bot-secret-2024';
+const WEBHOOK_URL = `${VERCEL_URL}/api/bot?secret=${WEBHOOK_SECRET}`;
+
+if (!BOT_TOKEN) {
+  console.error('❌ Ошибка: TELEGRAM_BOT_TOKEN не найден в переменных окружения');
+  console.log('\n📝 Установите токен:');
+  console.log('1. Получите токен у @BotFather');
+  console.log('2. Добавьте в .env файл или переменные окружения Vercel');
+  console.log('3. Формат: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz');
+  process.exit(1);
+}
 
 async function setupWebhook() {
-  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-  const VERCEL_URL = process.env.VERCEL_URL;
-  
-  if (!BOT_TOKEN) {
-    console.error('❌ TELEGRAM_BOT_TOKEN не настроен');
-    console.log('\n📝 Настройка:');
-    console.log('1. Добавьте переменную в Vercel:');
-    console.log('   TELEGRAM_BOT_TOKEN = ваш_токен_от_BotFather');
-    console.log('2. Передеплойте проект');
-    return;
-  }
-  
-  if (!VERCEL_URL) {
-    console.error('❌ VERCEL_URL не определен');
-    console.log('\nℹ️ Обычно устанавливается автоматически Vercel');
-    return;
-  }
-  
-  const WEBHOOK_URL = `${VERCEL_URL}/api/bot`;
-  const bot = new TelegramBot(BOT_TOKEN);
-  
-  console.log('🔧 Настройка вебхука для Telegram бота');
-  console.log('🌐 Домен:', VERCEL_URL);
-  console.log('🔗 Вебхук URL:', WEBHOOK_URL);
-  console.log('🤖 Токен:', BOT_TOKEN.substring(0, 10) + '...');
+  console.log('🔧 Настройка вебхука для Telegram бота\n');
+  console.log(`🌐 Vercel URL: ${VERCEL_URL}`);
+  console.log(`🔗 Webhook URL: ${WEBHOOK_URL}`);
+  console.log(`🔑 Secret: ${WEBHOOK_SECRET}\n`);
   
   try {
-    // Получаем информацию о боте
+    const bot = new TelegramBot(BOT_TOKEN);
+    
+    // Проверяем токен
     const botInfo = await bot.getMe();
-    console.log('\n📋 Информация о боте:');
-    console.log('• Имя:', botInfo.first_name);
-    console.log('• Username:', '@' + botInfo.username);
-    console.log('• ID:', botInfo.id);
+    console.log(`🤖 Бот: @${botInfo.username} (${botInfo.first_name})`);
+    console.log(`🆔 ID: ${botInfo.id}`);
     
-    // Устанавливаем вебхук
-    console.log('\n🔄 Устанавливаю вебхук...');
-    const result = await bot.setWebHook(WEBHOOK_URL);
+    // Получаем текущую информацию о вебхуке
+    const currentWebhook = await bot.getWebHookInfo();
+    console.log('\n📊 Текущий вебхук:');
+    console.log(`URL: ${currentWebhook.url || 'Не установлен'}`);
+    console.log(`Ошибок: ${currentWebhook.pending_update_count || 0}`);
     
-    if (result) {
+    if (currentWebhook.url === WEBHOOK_URL) {
+      console.log('\n✅ Вебхук уже настроен правильно');
+    } else {
+      // Устанавливаем новый вебхук
+      console.log('\n🔄 Установка нового вебхука...');
+      await bot.setWebHook(WEBHOOK_URL, {
+        max_connections: 40,
+        allowed_updates: ['message', 'callback_query']
+      });
+      
       console.log('✅ Вебхук успешно установлен!');
       
-      // Проверяем вебхук
-      console.log('\n🔍 Проверяю настройки вебхука...');
-      const webhookInfo = await bot.getWebHookInfo();
-      
-      console.log('📊 Информация о вебхуке:');
-      console.log('• URL:', webhookInfo.url || 'Не установлен');
-      console.log('• Ожидает обновлений:', webhookInfo.pending_update_count || 0);
-      
-      if (webhookInfo.last_error_date) {
-        const errorDate = new Date(webhookInfo.last_error_date * 1000);
-        console.log('• Последняя ошибка:', webhookInfo.last_error_message);
-        console.log('• Дата ошибки:', errorDate.toLocaleString('ru-RU'));
-      } else {
-        console.log('• Последняя ошибка: Нет ошибок ✅');
-      }
-      
-      console.log('\n🎉 Настройка завершена!');
-      console.log('\n📱 Теперь вы можете:');
-      console.log('1. Открыть Telegram');
-      console.log('2. Найти бота: @' + botInfo.username);
-      console.log('3. Отправить команду /start');
-      console.log('4. Отправить фото для создания стикера');
-      
-      console.log('\n🔗 Прямая ссылка на бота:');
-      console.log(`https://t.me/${botInfo.username}`);
-      
-    } else {
-      console.error('❌ Не удалось установить вебхук');
+      // Проверяем установку
+      const newWebhook = await bot.getWebHookInfo();
+      console.log(`\n📋 Проверка: ${newWebhook.url ? '✅' : '❌'}`);
+      console.log(`Последняя ошибка: ${newWebhook.last_error_date ? new Date(newWebhook.last_error_date * 1000) : 'Нет'}`);
     }
     
+    // Устанавливаем команды бота
+    console.log('\n🔄 Настройка команд бота...');
+    await bot.setMyCommands([
+      { command: 'start', description: 'Запустить бота' },
+      { command: 'help', description: 'Справка' },
+      { command: 'status', description: 'Статус системы' },
+      { command: 'stats', description: 'Моя статистика' }
+    ]);
+    console.log('✅ Команды настроены');
+    
+    console.log('\n🎉 Настройка завершена!');
+    console.log(`\n📱 Теперь откройте Telegram: https://t.me/${botInfo.username}`);
+    console.log(`🔧 Для управления: ${VERCEL_URL}/api/setup-webhook`);
+    
   } catch (error) {
-    console.error('❌ Ошибка настройки вебхука:', error.message);
-    console.log('\n🔧 Возможные решения:');
-    console.log('1. Проверьте токен бота');
-    console.log('2. Убедитесь, что домен Vercel доступен');
-    console.log('3. Проверьте интернет соединение');
+    console.error(`\n❌ Ошибка настройки: ${error.message}`);
+    
+    if (error.response) {
+      console.log(`Код ошибки: ${error.response.statusCode}`);
+      console.log(`Тело ответа: ${JSON.stringify(error.response.body)}`);
+    }
+    
+    process.exit(1);
   }
 }
 
-// Запуск скрипта
-if (require.main === module) {
-  setupWebhook();
-}
-
-module.exports = { setupWebhook };
+// Запуск
+setupWebhook();
