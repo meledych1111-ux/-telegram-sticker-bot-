@@ -147,9 +147,9 @@ async function initDatabase() {
     
     console.log('\n🎉 Инициализация базы данных завершена успешно!');
     
-  } catch (error) {
-    console.error(`\n❌ Ошибка инициализации базы данных: ${error.message}`);
-    console.error(`Стек: ${error.stack}`);
+  } catch (err) {
+    console.error(`\n❌ Ошибка инициализации базы данных: ${err.message}`);
+    console.error(`Стек: ${err.stack}`);
     process.exit(1);
   } finally {
     if (sql) {
