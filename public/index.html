@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎨 Telegram Sticker Bot</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-sticker-mule"></i>
+                <h1>Telegram Sticker Bot</h1>
+            </div>
+            <p class="tagline">Создавай стикеры с эффектами прямо в Telegram!</p>
+        </header>
+
+        <main>
+            <div class="status-card">
+                <div class="status-header">
+                    <h2><i class="fas fa-server"></i> Статус системы</h2>
+                    <div class="status-indicator" id="statusIndicator">
+                        <span class="dot"></span>
+                        <span>Проверка...</span>
+                    </div>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <i class="fas fa-database"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="dbStatus">—</span>
+                            <span class="stat-label">База данных</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <i class="fas fa-users"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="totalUsers">—</span>
+                            <span class="stat-label">Пользователей</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <i class="fas fa-sticky-note"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="totalStickers">—</span>
+                            <span class="stat-label">Стикеров</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <i class="fas fa-bolt"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="cacheHitRate">—</span>
+                            <span class="stat-label">Эффективность кэша</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="features">
+                <h2><i class="fas fa-star"></i> Возможности бота</h2>
+                <div class="features-grid">
+                    <div class="feature">
+                        <i class="fas fa-palette"></i>
+                        <h3>12+ Эффектов</h3>
+                        <p>Неон, градиент, перламутр, винтаж и другие</p>
+                    </div>
+                    <div class="feature">
+                        <i class="fas fa-shapes"></i>
+                        <h3>7+ Рамок</h3>
+                        <p>Сердце, звезда, круг, облако, шестиугольник</p>
+                    </div>
+                    <div class="feature">
+                        <i class="fas fa-font"></i>
+                        <h3>Текст на стикерах</h3>
+                        <p>Добавляй любой текст в разных позициях</p>
+                    </div>
+                    <div class="feature">
+                        <i class="fas fa-trophy"></i>
+                        <h3>Рейтинговая система</h3>
+                        <p>Соревнуйся с другими пользователями</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cta">
+                <h2><i class="fab fa-telegram"></i> Начать использовать</h2>
+                <p>Просто открой Telegram и начни диалог с ботом</p>
+                <a href="https://t.me/your_bot_username" target="_blank" class="btn">
+                    <i class="fab fa-telegram"></i> Открыть в Telegram
+                </a>
+            </div>
+
+            <div class="tech-stack">
+                <h2><i class="fas fa-code"></i> Технологии</h2>
+                <div class="tech-icons">
+                    <span class="tech-icon" title="Node.js 20"><i class="fab fa-node-js"></i> Node 20</span>
+                    <span class="tech-icon" title="Vercel"><i class="fas fa-cloud"></i> Vercel</span>
+                    <span class="tech-icon" title="Neon PostgreSQL"><i class="fas fa-database"></i> Neon</span>
+                    <span class="tech-icon" title="Telegram Bot API"><i class="fab fa-telegram"></i> Telegram</span>
+                    <span class="tech-icon" title="Sharp"><i class="fas fa-image"></i> Sharp</span>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>© 2024 Telegram Sticker Bot. Полностью бесплатный проект.</p>
+            <div class="footer-links">
+                <a href="/api/status" target="_blank">API Status</a>
+                <span>•</span>
+                <a href="https://github.com/yourusername/telegram-sticker-bot" target="_blank">GitHub</a>
+                <span>•</span>
+                <a href="https://vercel.com" target="_blank">Хостинг Vercel</a>
+                <span>•</span>
+                <a href="https://neon.tech" target="_blank">База данных Neon</a>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/script.js"></script>
+</body>
+</html>
