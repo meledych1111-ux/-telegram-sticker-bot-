@@ -5,476 +5,593 @@ const {
   initDatabase, 
   saveSticker, 
   getUserStickers,
-  deleteSticker,
   createFolder,
   getFolders,
   deleteFolder,
+  deleteSticker,
   updateStats,
   getStats,
   getUser
 } = require('../lib/database');
 
+// ИМПОРТ МЕНЮ
+const {
+  showMainMenu,
+  showEffectsMenu,
+  showFoldersMenu,
+  showStickersMenu,
+  showSettingsMenu,
+  showHelpMenu,
+  showStatsMenu,
+  showFavoritesMenu,
+  showCreateFolderMenu,
+  showDeleteMenu,
+  showTextMenu,
+  showColorMenu
+} = require('./menu');
+
 const app = express();
 app.use(express.json());
 
-// ================= ПРОВЕРКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ =================
-console.log('🔧 Проверка переменных окружения...');
-console.log('TELEGRAM_BOT_TOKEN:', process.env.TELEGRAM_BOT_TOKEN ? '✅ Установлен' : '❌ Отсутствует');
-console.log('NEON_DATABASE_URL:', process.env.NEON_DATABASE_URL ? '✅ Установлен' : '❌ Отсутствует');
-console.log('VERCEL_URL:', process.env.VERCEL_URL || '⚠️  Не установлен');
-
-if (!process.env.TELEGRAM_BOT_TOKEN) {
-  console.error('❌ ОШИБКА: TELEGRAM_BOT_TOKEN не найден!');
-  console.log('ℹ️ Добавьте в Vercel → Settings → Environment Variables');
-}
-
-if (!process.env.NEON_DATABASE_URL) {
-  console.error('❌ ОШИБКА: NEON_DATABASE_URL не найден!');
-  console.log('ℹ️ Добавьте строку подключения от Neon');
+// Проверка переменных
+if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.NEON_DATABASE_URL) {
+  console.error('❌ Отсутствуют переменные окружения!');
+  process.exit(1);
 }
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = new TelegramBot(token);
 
-// Инициализация базы данных
-initDatabase().then(() => {
-  console.log('✅ База данных инициализирована');
-}).catch(err => {
-  console.error('❌ Ошибка инициализации БД:', err);
-});
+// Установка команд
+bot.setMyCommands([
+  { command: 'start', description: 'Запустить бота' },
+  { command: 'menu', description: 'Главное меню' },
+  { command: 'help', description: 'Помощь' }
+]);
 
-// Хранилище сессий пользователей
+// Инициализация БД
+initDatabase();
+
+// Хранилище сессий
 const userSessions = {};
 
-// ================= КОМАНДЫ БОТА =================
+// ================= ОБРАБОТКА СООБЩЕНИЙ =================
 app.post('/api/bot', async (req, res) => {
   try {
     const update = req.body;
-    
-    // Обработка сообщений
+
+    // Сообщения
     if (update.message) {
       const chatId = update.message.chat.id;
-      const messageText = update.message.text;
       const userId = update.message.from.id;
+      const messageText = update.message.text;
       const username = update.message.from.username || update.message.from.first_name;
 
-      console.log(`📨 Сообщение от ${username} (${userId}): ${messageText || 'фото/документ'}`);
+      console.log(`📨 От ${username}: ${messageText || 'фото'}`);
 
-      // Регистрация/получение пользователя
+      // Регистрация пользователя
       await getUser(userId, username);
 
-      // Обработка текстовых команд
+      // Обработка текстовых сообщений
       if (messageText) {
-        switch (messageText) {
-          case '/start':
-            await sendWelcome(chatId, username);
-            await showMainMenu(chatId);
-            break;
-            
-          case '/menu':
-          case '📋 Меню':
-            await showMainMenu(chatId);
-            break;
-            
-          case '/newsticker':
-          case '🎨 Новый стикер':
-            await bot.sendMessage(chatId, '📸 Отправьте мне изображение (JPG или PNG):');
-            userSessions[userId] = { state: 'awaiting_image' };
-            break;
-            
-          case '/mystickers':
-          case '📁 Мои стикеры':
-            await showMyStickers(chatId, userId);
-            break;
-            
-          case '/folders':
-          case '📂 Папки':
-            await showFolders(chatId, userId);
-            break;
-            
-          case '/stats':
-          case '📊 Статистика':
-            await showUserStats(chatId, userId);
-            break;
-            
-          case '/help':
-          case 'ℹ️ Помощь':
-            await showHelp(chatId);
-            break;
-            
-          case '🚫 Отмена':
-            delete userSessions[userId];
-            await bot.sendMessage(chatId, '❌ Действие отменено');
-            await showMainMenu(chatId);
-            break;
-            
-          default:
-            // Обработка текста для стикера
-            if (userSessions[userId]?.state === 'awaiting_text') {
-              userSessions[userId].text = messageText;
-              await bot.sendMessage(chatId, `✅ Текст добавлен: "${messageText}"\nТеперь выберите эффекты:`);
-              await showEffectsMenu(chatId);
-            }
-            // Обработка названия папки
-            else if (userSessions[userId]?.state === 'awaiting_folder_name') {
-              const folderName = messageText.substring(0, 50);
-              const folder = await createFolder(userId, folderName);
-              await bot.sendMessage(chatId, `✅ Папка создана: "${folderName}"`);
-              delete userSessions[userId];
-              await showFolders(chatId, userId);
-            }
-        }
+        await handleTextMessage(chatId, userId, messageText);
       }
 
       // Обработка фото
-      if (update.message.photo && userSessions[userId]?.state === 'awaiting_image') {
-        const photo = update.message.photo[update.message.photo.length - 1];
-        await handleImageUpload(chatId, userId, photo.file_id);
+      if (update.message.photo) {
+        await handlePhotoMessage(chatId, userId, update.message.photo);
       }
 
       // Обработка документов (PNG)
-      if (update.message.document && userSessions[userId]?.state === 'awaiting_image') {
-        const doc = update.message.document;
-        if (doc.mime_type === 'image/png' || doc.mime_type === 'image/jpeg') {
-          await handleImageUpload(chatId, userId, doc.file_id);
-        } else {
-          await bot.sendMessage(chatId, '❌ Пожалуйста, отправьте изображение в формате JPG или PNG');
-        }
+      if (update.message.document) {
+        await handleDocumentMessage(chatId, userId, update.message.document);
       }
     }
 
-    // Обработка callback_query (нажатия кнопок)
+    // Callback запросы (нажатия кнопок)
     if (update.callback_query) {
-      const data = update.callback_query.data;
-      const chatId = update.callback_query.message.chat.id;
-      const userId = update.callback_query.from.id;
-      
-      console.log(`🔄 Callback: ${data} от ${userId}`);
-      
-      if (data === 'effect_text') {
-        await bot.sendMessage(chatId, '✏️ Введите текст для стикера:');
-        userSessions[userId] = { ...userSessions[userId], state: 'awaiting_text' };
-      }
-      else if (data === 'effect_frame') {
-        await applyEffectAndFinish(chatId, userId, 'frame');
-      }
-      else if (data === 'effect_pearl') {
-        await applyEffectAndFinish(chatId, userId, 'pearl');
-      }
-      else if (data === 'effect_none') {
-        await applyEffectAndFinish(chatId, userId, 'none');
-      }
-      else if (data === 'create_folder') {
-        await bot.sendMessage(chatId, '📝 Введите название для новой папки:');
-        userSessions[userId] = { state: 'awaiting_folder_name' };
-      }
-      else if (data === 'list_folders') {
-        await showUserFolders(chatId, userId);
-      }
-      
-      await bot.answerCallbackQuery(update.callback_query.id);
+      await handleCallbackQuery(update.callback_query);
     }
-    
+
     res.status(200).send('OK');
-    
   } catch (error) {
-    console.error('❌ Ошибка в обработчике:', error);
+    console.error('❌ Ошибка:', error);
     res.status(500).send('Internal Server Error');
   }
 });
 
-// ================= ФУНКЦИИ БОТА =================
+// ================= ТЕКСТОВЫЕ СООБЩЕНИЯ =================
+async function handleTextMessage(chatId, userId, text) {
+  switch (text) {
+    case '/start':
+      await bot.sendMessage(chatId, `✨ *Добро пожаловать!* ✨\n\n` +
+        `Я бот для создания стикеров с эффектами!\n` +
+        `Отправьте мне фото или используйте меню.`, { parse_mode: 'Markdown' });
+      await showMainMenu(bot, chatId);
+      break;
 
-// Приветственное сообщение
-async function sendWelcome(chatId, username) {
-  const welcome = `👋 *Привет, ${username}!*\n\n` +
-    `🎨 Я — бот для создания стикеров!\n\n` +
-    `*Что я умею:*\n` +
-    `• Создавать стикеры из фото\n` +
-    `• Добавлять текст и эффекты\n` +
-    `• Хранить ваши стикеры\n` +
-    `• Сортировать по папкам\n` +
-    `• Показывать статистику\n\n` +
-    `📱 Используйте меню ниже для навигации.`;
-  
-  await bot.sendMessage(chatId, welcome, { parse_mode: 'Markdown' });
-}
+    case '/menu':
+    case 'меню':
+    case 'Меню':
+      await showMainMenu(bot, chatId);
+      break;
 
-// Главное меню
-async function showMainMenu(chatId) {
-  const menu = {
-    reply_markup: {
-      keyboard: [
-        ['🎨 Новый стикер', '📁 Мои стикеры'],
-        ['📂 Папки', '📊 Статистика'],
-        ['ℹ️ Помощь', '📋 Меню']
-      ],
-      resize_keyboard: true,
-      one_time_keyboard: false
-    }
-  };
-  
-  await bot.sendMessage(chatId, '📱 *Главное меню:*\nВыберите действие:', { 
-    parse_mode: 'Markdown',
-    ...menu 
-  });
-}
+    case '🎨 Создать стикер':
+      await bot.sendMessage(chatId, '📸 *Отправьте мне фото или PNG-изображение*\n\n' +
+        'Я обрежу его в квадрат и добавлю эффекты!', { parse_mode: 'Markdown' });
+      userSessions[userId] = { state: 'awaiting_image' };
+      break;
 
-// Загрузка изображения
-async function handleImageUpload(chatId, userId, fileId) {
-  try {
-    await bot.sendMessage(chatId, '⏳ Обрабатываю изображение...');
-    
-    const file = await bot.getFile(fileId);
-    const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
-    
-    userSessions[userId] = {
-      state: 'awaiting_effects',
-      imageUrl: fileUrl
-    };
-    
-    await showEffectsMenu(chatId);
-    
-  } catch (error) {
-    console.error('Ошибка загрузки:', error);
-    await bot.sendMessage(chatId, '❌ Не удалось загрузить изображение');
+    case '📁 Мои стикеры':
+      await showUserStickers(chatId, userId);
+      break;
+
+    case '📂 Папки':
+      await showUserFolders(chatId, userId);
+      break;
+
+    case '⭐ Избранное':
+      await showFavorites(bot, chatId, userId);
+      break;
+
+    case '📊 Статистика':
+      await showUserStatistics(chatId, userId);
+      break;
+
+    case '⚙️ Настройки':
+      await showSettingsMenu(bot, chatId);
+      break;
+
+    case 'ℹ️ Помощь':
+      await showHelpMenu(bot, chatId);
+      break;
+
+    case '👥 Топ пользователей':
+      await showTopUsers(chatId);
+      break;
+
+    case '/help':
+      await showHelp(bot, chatId);
+      break;
+
+    default:
+      // Обработка текста для стикера
+      if (userSessions[userId]?.state === 'awaiting_text') {
+        userSessions[userId].text = text;
+        await bot.sendMessage(chatId, `✅ Текст добавлен: "${text}"`);
+        await showEffectsMenu(bot, chatId);
+      }
+      // Обработка названия папки
+      else if (userSessions[userId]?.state === 'awaiting_folder_name') {
+        await createUserFolder(chatId, userId, text);
+      }
+      else {
+        await bot.sendMessage(chatId, 'Используйте меню или отправьте фото для создания стикера 🎨');
+      }
   }
 }
 
-// Меню эффектов
-async function showEffectsMenu(chatId) {
-  const keyboard = {
-    inline_keyboard: [
-      [
-        { text: '📝 Добавить текст', callback_data: 'effect_text' },
-        { text: '🖼️ Рамка', callback_data: 'effect_frame' }
-      ],
-      [
-        { text: '✨ Перламутр', callback_data: 'effect_pearl' },
-        { text: '✅ Без эффектов', callback_data: 'effect_none' }
-      ],
-      [
-        { text: '🚫 Отмена', callback_data: 'effect_cancel' }
-      ]
-    ]
-  };
-  
-  await bot.sendMessage(chatId, '🎭 *Выберите эффекты для стикера:*', {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard
-  });
+// ================= CALLBACK ЗАПРОСЫ =================
+async function handleCallbackQuery(callback) {
+  const chatId = callback.message.chat.id;
+  const userId = callback.from.id;
+  const data = callback.data;
+
+  console.log(`🔄 Callback: ${data} от ${userId}`);
+
+  try {
+    // Обработка основных действий
+    switch (data) {
+      // Эффекты
+      case 'effect_text':
+        await bot.sendMessage(chatId, '✏️ *Введите текст для стикера:*', { parse_mode: 'Markdown' });
+        userSessions[userId] = { ...userSessions[userId], state: 'awaiting_text' };
+        break;
+
+      case 'effect_frame':
+        await showColorMenu(bot, chatId);
+        userSessions[userId] = { ...userSessions[userId], selectedEffect: 'frame' };
+        break;
+
+      case 'effect_pearl':
+        await processStickerWithEffect(chatId, userId, 'pearl');
+        break;
+
+      case 'effect_gradient':
+        await processStickerWithEffect(chatId, userId, 'gradient');
+        break;
+
+      case 'effect_none':
+        await processStickerWithEffect(chatId, userId, 'none');
+        break;
+
+      case 'effect_finish':
+        await finishStickerCreation(chatId, userId);
+        break;
+
+      // Цвета рамки
+      case 'color_white':
+      case 'color_black':
+      case 'color_red':
+      case 'color_blue':
+      case 'color_green':
+      case 'color_yellow':
+      case 'color_purple':
+      case 'color_orange':
+      case 'color_pink':
+      case 'color_gold':
+      case 'color_silver':
+      case 'color_gradient':
+        const color = data.replace('color_', '');
+        userSessions[userId] = { 
+          ...userSessions[userId], 
+          frameColor: color,
+          selectedEffect: 'frame'
+        };
+        await bot.sendMessage(chatId, `✅ Цвет рамки: ${color}`);
+        await showEffectsMenu(bot, chatId);
+        break;
+
+      // Папки
+      case 'create_folder':
+        await bot.sendMessage(chatId, '📝 *Введите название для новой папки:*', { parse_mode: 'Markdown' });
+        userSessions[userId] = { state: 'awaiting_folder_name' };
+        break;
+
+      case 'delete_folder':
+        await showDeleteMenu(bot, chatId, 'folder');
+        break;
+
+      // Навигация
+      case 'back_to_menu':
+        await showMainMenu(bot, chatId);
+        break;
+
+      case 'cancel':
+        delete userSessions[userId];
+        await bot.sendMessage(chatId, '❌ Действие отменено');
+        await showMainMenu(bot, chatId);
+        break;
+
+      // Статистика
+      case 'stats_refresh':
+        await showUserStatistics(chatId, userId);
+        break;
+
+      case 'stats_top':
+        await showTopUsers(chatId);
+        break;
+
+      // Помощь
+      case 'help_create':
+        await bot.sendMessage(chatId, '📖 *Как создать стикер:*\n\n' +
+          '1. Нажмите "🎨 Создать стикер"\n' +
+          '2. Отправьте фото или PNG\n' +
+          '3. Выберите эффекты\n' +
+          '4. Получите готовый стикер!', { parse_mode: 'Markdown' });
+        break;
+
+      case 'help_support':
+        await bot.sendMessage(chatId, '📞 *Поддержка:*\n\n' +
+          'По вопросам и предложениям:\n' +
+          '@ваш_администратор\n\n' +
+          'Мы всегда рады помочь! ✨', { parse_mode: 'Markdown' });
+        break;
+
+      // Удаление
+      case 'delete_sticker_confirm':
+        await deleteStickerById(chatId, userId);
+        break;
+
+      case 'delete_folder_confirm':
+        await deleteUserFolder(chatId, userId);
+        break;
+
+      // Другие действия
+      default:
+        // Обработка папок (folder_123)
+        if (data.startsWith('folder_')) {
+          const folderId = data.split('_')[1];
+          await showFolderStickers(chatId, userId, folderId);
+        }
+        // Обработка стикеров (sticker_123)
+        else if (data.startsWith('sticker_')) {
+          const stickerId = data.split('_')[1];
+          await showStickerActions(chatId, userId, stickerId);
+        }
+    }
+
+    // Ответ на callback
+    await bot.answerCallbackQuery(callback.id);
+  } catch (error) {
+    console.error('❌ Ошибка обработки callback:', error);
+    await bot.answerCallbackQuery(callback.id, { text: '❌ Ошибка обработки' });
+  }
 }
 
-// Применение эффектов и сохранение
-async function applyEffectAndFinish(chatId, userId, effectType) {
+// ================= ОСНОВНЫЕ ФУНКЦИИ =================
+
+// Обработка фото
+async function handlePhotoMessage(chatId, userId, photoArray) {
+  if (userSessions[userId]?.state !== 'awaiting_image') {
+    await bot.sendMessage(chatId, '📸 Получено фото! Нажмите "🎨 Создать стикер" в меню для обработки.');
+    return;
+  }
+
+  try {
+    await bot.sendMessage(chatId, '🔄 *Обрабатываю изображение...*', { parse_mode: 'Markdown' });
+
+    const fileId = photoArray[photoArray.length - 1].file_id;
+    const file = await bot.getFile(fileId);
+    const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+
+    userSessions[userId] = {
+      ...userSessions[userId],
+      state: 'awaiting_effects',
+      imageUrl: fileUrl,
+      fileId: fileId
+    };
+
+    await showEffectsMenu(bot, chatId);
+  } catch (error) {
+    console.error('❌ Ошибка загрузки фото:', error);
+    await bot.sendMessage(chatId, '❌ Не удалось загрузить фото');
+  }
+}
+
+// Обработка документов
+async function handleDocumentMessage(chatId, userId, document) {
+  if (!['image/png', 'image/jpeg'].includes(document.mime_type)) {
+    await bot.sendMessage(chatId, '❌ Пожалуйста, отправьте PNG или JPG изображение');
+    return;
+  }
+
+  if (userSessions[userId]?.state !== 'awaiting_image') {
+    await bot.sendMessage(chatId, '📎 Получен файл! Нажмите "🎨 Создать стикер" в меню для обработки.');
+    return;
+  }
+
+  try {
+    await bot.sendMessage(chatId, '🔄 *Обрабатываю изображение...*', { parse_mode: 'Markdown' });
+
+    const file = await bot.getFile(document.file_id);
+    const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+
+    userSessions[userId] = {
+      ...userSessions[userId],
+      state: 'awaiting_effects',
+      imageUrl: fileUrl,
+      fileId: document.file_id
+    };
+
+    await showEffectsMenu(bot, chatId);
+  } catch (error) {
+    console.error('❌ Ошибка загрузки документа:', error);
+    await bot.sendMessage(chatId, '❌ Не удалось загрузить файл');
+  }
+}
+
+// Создание стикера с эффектом
+async function processStickerWithEffect(chatId, userId, effectType) {
   try {
     const session = userSessions[userId];
     if (!session?.imageUrl) {
       await bot.sendMessage(chatId, '❌ Изображение не найдено. Начните заново.');
       return;
     }
-    
-    await bot.sendMessage(chatId, '🎨 Создаю стикер...');
-    
+
+    await bot.sendMessage(chatId, '🎨 *Создаю стикер...*', { parse_mode: 'Markdown' });
+
     // Обработка изображения
     let imageBuffer = await processImage(session.imageUrl);
-    
-    // Применение эффектов
+
+    // Применение текста
     if (session.text) {
       imageBuffer = await addText(imageBuffer, session.text);
     }
-    
+
+    // Применение эффектов
     if (effectType === 'frame') {
-      imageBuffer = await addFrame(imageBuffer);
+      const color = session.frameColor || 'white';
+      imageBuffer = await addFrame(imageBuffer, color);
     } else if (effectType === 'pearl') {
       imageBuffer = await addPearlEffect(imageBuffer);
+    } else if (effectType === 'gradient') {
+      // Добавьте функцию для градиента в imageProcessor.js
+      imageBuffer = await addPearlEffect(imageBuffer); // временно используем перламутр
     }
-    
-    // Сохранение в БД
-    const stickerId = await saveSticker(userId, imageBuffer, effectType, session?.text || '');
-    
+
+    // Сохранение стикера
+    const stickerId = await saveSticker(userId, imageBuffer, effectType, session.text || '');
+
     // Обновление статистики
     await updateStats(userId);
-    
+
     // Отправка результата
     await bot.sendPhoto(chatId, imageBuffer, {
-      caption: `✅ *Стикер создан!*\nID: ${stickerId}\nЭффект: ${effectType}`,
+      caption: `✅ *Стикер создан!*\n\n` +
+        `ID: #${stickerId}\n` +
+        `Эффект: ${effectType}\n` +
+        `${session.text ? `Текст: "${session.text}"` : ''}\n\n` +
+        `💾 Стикер сохранен в вашу коллекцию!`,
       parse_mode: 'Markdown'
     });
-    
+
     // Очистка сессии
     delete userSessions[userId];
-    
-    await showMainMenu(chatId);
-    
+
+    // Предложение дальнейших действий
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '📁 Сохранить в папку', callback_data: 'save_to_folder' },
+          { text: '⭐ Добавить в избранное', callback_data: 'add_to_favorites' }
+        ],
+        [
+          { text: '🎨 Создать еще', callback_data: 'create_another' },
+          { text: '📋 В меню', callback_data: 'back_to_menu' }
+        ]
+      ]
+    };
+
+    await bot.sendMessage(chatId, 'Что дальше?', { reply_markup: keyboard });
+
   } catch (error) {
-    console.error('Ошибка создания стикера:', error);
-    await bot.sendMessage(chatId, '❌ Ошибка при создании стикера');
+    console.error('❌ Ошибка создания стикера:', error);
+    await bot.sendMessage(chatId, '❌ Ошибка при создании стикера. Попробуйте еще раз.');
   }
 }
 
-// Показать мои стикеры
-async function showMyStickers(chatId, userId) {
+// Завершение создания стикера
+async function finishStickerCreation(chatId, userId) {
+  const session = userSessions[userId];
+  const effectType = session?.selectedEffect || 'none';
+  await processStickerWithEffect(chatId, userId, effectType);
+}
+
+// Показать стикеры пользователя
+async function showUserStickers(chatId, userId) {
   try {
     const stickers = await getUserStickers(userId);
-    
-    if (stickers.length === 0) {
-      await bot.sendMessage(chatId, '📭 У вас пока нет стикеров.\nСоздайте первый через "🎨 Новый стикер"');
-      return;
-    }
-    
-    await bot.sendMessage(chatId, `📚 *Ваши стикеры:* (${stickers.length} шт.)`, {
-      parse_mode: 'Markdown'
-    });
-    
-    // Отправляем первые 5 стикеров
-    for (let i = 0; i < Math.min(5, stickers.length); i++) {
-      await bot.sendPhoto(chatId, stickers[i].image_data, {
-        caption: `Стикер #${stickers[i].id}\n${new Date(stickers[i].created_at).toLocaleDateString('ru-RU')}`
-      });
-    }
-    
-    if (stickers.length > 5) {
-      await bot.sendMessage(chatId, `... и еще ${stickers.length - 5} стикеров`);
-    }
-    
+    await showStickersMenu(bot, chatId, stickers);
   } catch (error) {
-    console.error('Ошибка загрузки стикеров:', error);
-    await bot.sendMessage(chatId, '❌ Ошибка при загрузке стикеров');
+    console.error('❌ Ошибка загрузки стикеров:', error);
+    await bot.sendMessage(chatId, '❌ Не удалось загрузить стикеры');
   }
-}
-
-// Управление папками
-async function showFolders(chatId, userId) {
-  const keyboard = {
-    inline_keyboard: [
-      [{ text: '➕ Создать папку', callback_data: 'create_folder' }],
-      [{ text: '📁 Мои папки', callback_data: 'list_folders' }],
-      [{ text: '🔙 Назад', callback_data: 'back_to_menu' }]
-    ]
-  };
-  
-  await bot.sendMessage(chatId, '📂 *Управление папками:*', {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard
-  });
 }
 
 // Показать папки пользователя
 async function showUserFolders(chatId, userId) {
   try {
     const folders = await getFolders(userId);
-    
-    if (folders.length === 0) {
-      await bot.sendMessage(chatId, '📭 У вас пока нет папок.');
-      return;
-    }
-    
-    let message = '📂 *Ваши папки:*\n\n';
-    folders.forEach((folder, index) => {
-      message += `${index + 1}. ${folder.name}\n`;
-    });
-    
-    await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-    
+    await showFoldersMenu(bot, chatId, folders);
   } catch (error) {
-    console.error('Ошибка загрузки папок:', error);
-    await bot.sendMessage(chatId, '❌ Ошибка при загрузке папок');
+    console.error('❌ Ошибка загрузки папок:', error);
+    await bot.sendMessage(chatId, '❌ Не удалось загрузить папки');
   }
 }
 
-// Статистика пользователя
-async function showUserStats(chatId, userId) {
+// Создать папку
+async function createUserFolder(chatId, userId, folderName) {
+  try {
+    if (!folderName || folderName.trim().length === 0) {
+      await bot.sendMessage(chatId, '❌ Название папки не может быть пустым');
+      return;
+    }
+
+    if (folderName.length > 50) {
+      await bot.sendMessage(chatId, '❌ Название слишком длинное (макс. 50 символов)');
+      return;
+    }
+
+    const folder = await createFolder(userId, folderName);
+    
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '📂 Открыть папку', callback_data: `folder_${folder.id}` },
+          { text: '➕ Добавить стикеры', callback_data: `add_to_folder_${folder.id}` }
+        ],
+        [
+          { text: '🔙 К папкам', callback_data: 'show_folders' }
+        ]
+      ]
+    };
+
+    await bot.sendMessage(chatId, `✅ *Папка создана!*\n\n"${folderName}"`, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard
+    });
+
+    delete userSessions[userId];
+  } catch (error) {
+    console.error('❌ Ошибка создания папки:', error);
+    await bot.sendMessage(chatId, '❌ Не удалось создать папку');
+  }
+}
+
+// Показать статистику
+async function showUserStatistics(chatId, userId) {
   try {
     const stats = await getStats(userId);
-    
-    const statsMessage = `📊 *Ваша статистика:*\n\n` +
-      `👤 Имя: ${stats.username}\n` +
-      `🎨 Стикеров: ${stats.stickers_count}\n` +
-      `⭐ Рейтинг: ${stats.rating}/10\n` +
-      `📅 Создан: ${new Date(stats.created_at).toLocaleDateString('ru-RU')}`;
-    
-    await bot.sendMessage(chatId, statsMessage, { parse_mode: 'Markdown' });
-    
+    await showStatsMenu(bot, chatId, stats);
   } catch (error) {
-    console.error('Ошибка статистики:', error);
-    await bot.sendMessage(chatId, '❌ Ошибка при загрузке статистики');
+    console.error('❌ Ошибка статистики:', error);
+    await bot.sendMessage(chatId, '❌ Не удалось загрузить статистику');
   }
+}
+
+// Показать топ пользователей
+async function showTopUsers(chatId) {
+  const { sql } = require('../lib/database');
+  
+  try {
+    const topUsers = await sql`
+      SELECT username, stickers_count, rating
+      FROM users
+      ORDER BY stickers_count DESC, rating DESC
+      LIMIT 10
+    `;
+
+    let message = '🏆 *Топ пользователей:*\n\n';
+    
+    if (topUsers.length === 0) {
+      message += 'Пока нет данных о пользователях';
+    } else {
+      topUsers.forEach((user, index) => {
+        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+        message += `${medal} ${user.username || 'Аноним'}\n`;
+        message += `   🎨 ${user.stickers_count} стикеров | ⭐ ${user.rating}/10\n\n`;
+      });
+    }
+
+    await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  } catch (error) {
+    console.error('❌ Ошибка топа:', error);
+    await bot.sendMessage(chatId, '❌ Не удалось загрузить топ');
+  }
+}
+
+// Показать избранное
+async function showFavorites(bot, chatId, userId) {
+  // Здесь можно реализовать логику избранного
+  await showFavoritesMenu(bot, chatId, []);
 }
 
 // Помощь
-async function showHelp(chatId) {
-  const helpText = `❓ *Помощь по боту*\n\n` +
+async function showHelp(bot, chatId) {
+  const helpText = `🎨 *Помощь по боту*\n\n` +
     `*Основные команды:*\n` +
     `/start - Запустить бота\n` +
-    `/menu - Главное меню\n` +
-    `/newsticker - Создать стикер\n` +
-    `/mystickers - Мои стикеры\n` +
-    `/folders - Управление папками\n` +
-    `/stats - Статистика\n\n` +
-    `*Как создать стикер:*\n` +
-    `1. Нажмите "🎨 Новый стикер"\n` +
-    `2. Отправьте фото (JPG/PNG)\n` +
-    `3. Выберите эффекты\n` +
-    `4. Получите готовый стикер!\n\n` +
+    `/menu - Главное меню\n\n` +
+    `*Как работать:*\n` +
+    `1. Используйте кнопочное меню\n` +
+    `2. Отправьте фото для создания стикера\n` +
+    `3. Выбирайте эффекты и настройки\n` +
+    `4. Сохраняйте и делитесь!\n\n` +
+    `*Что умеет бот:*\n` +
+    `• Создавать стикеры из фото\n` +
+    `• Добавлять текст и эффекты\n` +
+    `• Хранить стикеры в папках\n` +
+    `• Показывать статистику\n\n` +
     `📞 Поддержка: @ваш_админ`;
-  
+
   await bot.sendMessage(chatId, helpText, { parse_mode: 'Markdown' });
 }
 
-// ================= API ЭНДПОИНТЫ =================
-app.get('/api/bot', (req, res) => {
-  res.json({
-    status: 'online',
-    bot: 'Telegram Sticker Bot',
-    time: new Date().toISOString(),
-    env: {
-      hasToken: !!process.env.TELEGRAM_BOT_TOKEN,
-      hasDb: !!process.env.NEON_DATABASE_URL,
-      vercelUrl: process.env.VERCEL_URL
-    }
-  });
-});
-
-app.get('/', (req, res) => {
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Sticker Bot</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-        .status { padding: 20px; margin: 20px; border-radius: 10px; }
-        .online { background: #d4edda; color: #155724; }
-        .offline { background: #f8d7da; color: #721c24; }
-        .btn { display: inline-block; padding: 10px 20px; margin: 10px; 
-               background: #007bff; color: white; text-decoration: none; 
-               border-radius: 5px; }
-      </style>
-    </head>
-    <body>
-      <h1>🎨 Telegram Sticker Bot</h1>
-      <div class="status online">
-        <h2>✅ Бот работает!</h2>
-        <p>Статус: Online</p>
-        <p>Время: ${new Date().toLocaleString()}</p>
-      </div>
-      <p>
-        <a href="https://t.me/${bot.options.username}" class="btn" target="_blank">📱 Открыть бота</a>
-        <a href="/api/check-env" class="btn">🔧 Проверить настройки</a>
-      </p>
-    </body>
-    </html>
-  `);
-});
-
-// ================= ЗАПУСК СЕРВЕРА =================
+// ================= СЕРВЕР =================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log(`🌐 Webhook URL: ${process.env.VERCEL_URL}/api/bot`);
-  console.log(`🤖 Бот: @${bot.options.username || 'неизвестно'}`);
+  console.log(`🚀 Бот запущен на порту ${PORT}`);
+  console.log(`🌐 Webhook: ${process.env.VERCEL_URL}/api/bot`);
+});
+
+app.get('/api/bot', (req, res) => {
+  res.json({ 
+    status: 'online',
+    bot: 'Telegram Sticker Bot',
+    menu: 'Кнопочное меню активировано'
+  });
 });
 
 module.exports = app;
