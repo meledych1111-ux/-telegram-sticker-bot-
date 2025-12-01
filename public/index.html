@@ -3,116 +3,489 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Telegram Sticker Bot</title>
+    <title>Telegram Sticker Bot PRO</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
     <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --accent: #ff6b6b;
+            --success: #06d6a0;
+            --warning: #ffd166;
+            --dark: #2d3748;
+            --light: #f7fafc;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: var(--light);
             min-height: 100vh;
-            margin: 0;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
             padding: 2rem;
-            display: flex;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding: 3rem 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-radius: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .logo {
+            font-size: 5rem;
+            margin-bottom: 1.5rem;
+            animation: float 6s ease-in-out infinite;
+            display: inline-block;
+            text-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            33% { transform: translateY(-20px) rotate(5deg); }
+            66% { transform: translateY(-10px) rotate(-5deg); }
+        }
+
+        h1 {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, #fff, #f0f0f0, #e0e0e0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .tagline {
+            font-size: 1.4rem;
+            opacity: 0.9;
+            margin-bottom: 3rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .telegram-btn {
+            display: inline-flex;
             align-items: center;
             justify-content: center;
+            gap: 1rem;
+            background: linear-gradient(135deg, var(--success), #06b48d);
+            color: white;
+            text-decoration: none;
+            padding: 1.2rem 2.5rem;
+            border-radius: 50px;
+            font-weight: bold;
+            font-size: 1.2rem;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 10px 30px rgba(6, 214, 160, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            position: relative;
+            overflow: hidden;
         }
-        
-        .container {
-            max-width: 800px;
-            text-align: center;
-            background: rgba(255, 255, 255, 0.1);
-            padding: 3rem;
-            border-radius: 20px;
+
+        .telegram-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.6s;
+        }
+
+        .telegram-btn:hover::before {
+            left: 100%;
+        }
+
+        .telegram-btn:hover {
+            transform: translateY(-5px) scale(1.05);
+            box-shadow: 0 20px 40px rgba(6, 214, 160, 0.6);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2.5rem;
+            margin: 4rem 0;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(10px);
+            padding: 2.5rem;
+            border-radius: 20px;
+            transition: all 0.4s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
         }
-        
-        h1 {
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent), var(--warning));
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px) scale(1.02);
+            background: rgba(255, 255, 255, 0.12);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .feature-icon {
             font-size: 3rem;
+            margin-bottom: 1.5rem;
+            display: inline-block;
+            animation: icon-bounce 2s infinite;
+        }
+
+        @keyframes icon-bounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .feature-card h3 {
+            font-size: 1.8rem;
             margin-bottom: 1rem;
+            color: white;
         }
-        
-        .logo {
-            font-size: 4rem;
-            margin-bottom: 2rem;
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin: 4rem 0;
         }
-        
-        .status {
-            background: rgba(0, 0, 0, 0.2);
-            padding: 1rem;
-            border-radius: 10px;
-            margin: 2rem 0;
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 2rem;
+            border-radius: 15px;
+            text-align: center;
+            transition: transform 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
         .tech-stack {
+            margin: 4rem 0;
+            text-align: center;
+        }
+
+        .tech-icons {
             display: flex;
             justify-content: center;
-            gap: 1rem;
+            gap: 1.5rem;
             flex-wrap: wrap;
-            margin: 2rem 0;
+            margin-top: 2rem;
         }
-        
-        .tech {
+
+        .tech-icon {
             background: rgba(255, 255, 255, 0.1);
-            padding: 0.5rem 1rem;
-            border-radius: 10px;
+            padding: 1rem 2rem;
+            border-radius: 15px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transition: all 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        
+
+        .tech-icon:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-3px);
+        }
+
+        .action-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin: 3rem 0;
+        }
+
         .btn {
             display: inline-block;
-            background: white;
-            color: #667eea;
             padding: 1rem 2rem;
-            border-radius: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
             text-decoration: none;
-            font-weight: bold;
-            margin: 1rem;
-            transition: transform 0.3s;
+            border-radius: 15px;
+            transition: all 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
         }
-        
+
         .btn:hover {
-            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-3px);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(6, 214, 160, 0.2);
+            color: var(--success);
+            padding: 0.5rem 1.5rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(6, 214, 160, 0.3);
+        }
+
+        .status-badge::before {
+            content: '●';
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 5rem;
+            padding-top: 3rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2.5rem;
+            }
+
+            .logo {
+                font-size: 3.5rem;
+            }
+
+            .features {
+                grid-template-columns: 1fr;
+            }
+
+            .tech-icons {
+                gap: 1rem;
+            }
+
+            .tech-icon {
+                padding: 0.8rem 1.5rem;
+                font-size: 1rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="logo">🎨</div>
-        <h1>Telegram Sticker Bot</h1>
-        <p>Создавайте красивые стикеры прямо в Telegram</p>
-        
-        <div class="status">
-            <p>✅ Бот работает на Vercel</p>
-            <p>⚡ Node.js 24</p>
-            <p>💾 Neon PostgreSQL</p>
+        <header>
+            <div class="logo">🎨</div>
+            <h1>Telegram Sticker Bot PRO</h1>
+            <p class="tagline">Полнофункциональный бот для создания стикеров с эффектами, рейтингами и облачным хранением</p>
+            
+            <div class="status-badge" id="statusBadge">Проверка статуса...</div>
+            
+            <a href="https://t.me/ваш_бот" class="telegram-btn" target="_blank" rel="noopener">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.57-1.38-.93-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.06-.2-.07-.06-.17-.04-.24-.03-.1.02-1.79 1.14-5.06 3.35-.48.33-.92.49-1.31.48-.43-.01-1.26-.24-1.88-.44-.75-.24-1.35-.37-1.3-.78.03-.24.37-.48 1-.74.16-.07.38-.15.6-.23 4.24-1.83 6.65-2.87 7.24-3.13 3.38-1.48 4.08-1.74 4.54-1.74.1 0 .33.02.48.14.12.1.15.23.17.33.01.1.02.32.01.5z"/>
+                </svg>
+                Открыть в Telegram
+            </a>
+        </header>
+
+        <section class="features">
+            <div class="feature-card">
+                <div class="feature-icon">✨</div>
+                <h3>Эффекты и Фильтры</h3>
+                <p>Рамки, перламутр, градиенты, текстовые наложения и профессиональные фильтры для ваших стикеров.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">💾</div>
+                <h3>Neon PostgreSQL</h3>
+                <p>Все данные хранятся в облачной базе данных Neon с автоматическим масштабированием и резервным копированием.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <h3>Node.js 24 + Vercel</h3>
+                <p>Современный стек на Node.js 24, развернутый на платформе Vercel Serverless для максимальной производительности.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Полная статистика</h3>
+                <p>Детальная статистика пользователей, рейтинги, топы и аналитика использования бота.</p>
+            </div>
+        </section>
+
+        <section class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="userCount">0</div>
+                <p>Пользователей</p>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="stickerCount">0</div>
+                <p>Создано стикеров</p>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="todayStickers">0</div>
+                <p>За сегодня</p>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">99.9%</div>
+                <p>Доступность</p>
+            </div>
+        </section>
+
+        <div class="action-buttons">
+            <a href="/health" class="btn">📊 Статус системы</a>
+            <a href="/setup-webhook" class="btn">🔗 Настроить вебхук</a>
+            <a href="/admin?token=YOUR_ADMIN_TOKEN" class="btn">👑 Админ панель</a>
+            <a href="https://github.com/ваш-репозиторий" class="btn" target="_blank">💻 Исходный код</a>
         </div>
-        
-        <div class="tech-stack">
-            <div class="tech">Node.js 24</div>
-            <div class="tech">Vercel</div>
-            <div class="tech">Neon DB</div>
-            <div class="tech">Telegram API</div>
-        </div>
-        
-        <div>
-            <a href="/api/health" class="btn">📊 Проверить статус</a>
-            <a href="/api/setup-webhook" class="btn">🔗 Настроить вебхук</a>
-        </div>
-        
-        <p style="margin-top: 2rem; opacity: 0.8;">
-            Отправьте команду /start в Telegram боту
-        </p>
+
+        <section class="tech-stack">
+            <h2 style="margin-bottom: 2rem; font-size: 2.5rem;">Технологический стек</h2>
+            <div class="tech-icons">
+                <div class="tech-icon">⚡ Node.js 24</div>
+                <div class="tech-icon">🚀 Vercel Serverless</div>
+                <div class="tech-icon">🐘 Neon PostgreSQL</div>
+                <div class="tech-icon">🔐 SSL/TLS</div>
+                <div class="tech-icon">🎨 Telegram Bot API</div>
+                <div class="tech-icon">📊 Express.js</div>
+            </div>
+        </section>
+
+        <footer>
+            <p>© 2024 Telegram Sticker Bot PRO | Все права защищены</p>
+            <p style="margin-top: 1rem; font-size: 0.9rem;">
+                Разработано на современном стеке с использованием Node.js 24, Vercel и Neon Database
+            </p>
+            <p style="margin-top: 2rem; opacity: 0.5; font-size: 0.8rem;">
+                Системный статус: <span id="systemStatus">Загрузка...</span>
+            </p>
+        </footer>
     </div>
-    
+
     <script>
-        // Автоматическая проверка статуса
-        fetch('/api/health')
-            .then(response => response.json())
-            .then(data => {
-                console.log('Статус системы:', data);
-            })
-            .catch(error => {
-                console.error('Ошибка проверки статуса:', error);
+        // Загрузка статистики
+        async function loadStats() {
+            try {
+                const response = await fetch('/health');
+                if (!response.ok) throw new Error('Ошибка сети');
+                
+                const data = await response.json();
+                
+                // Обновляем статус
+                const badge = document.getElementById('statusBadge');
+                const status = document.getElementById('systemStatus');
+                
+                if (data.status === 'healthy') {
+                    badge.innerHTML = '✅ Система активна';
+                    badge.style.background = 'rgba(6, 214, 160, 0.2)';
+                    badge.style.color = '#06d6a0';
+                    status.innerHTML = '<span style="color: #06d6a0;">● Активен</span>';
+                } else {
+                    badge.innerHTML = '⚠️ Проблемы с системой';
+                    badge.style.background = 'rgba(255, 107, 107, 0.2)';
+                    badge.style.color = '#ff6b6b';
+                    status.innerHTML = '<span style="color: #ff6b6b;">● Проблемы</span>';
+                }
+                
+                // Загружаем расширенную статистику если доступна
+                try {
+                    const statsResponse = await fetch('/api/admin?token=demo');
+                    if (statsResponse.ok) {
+                        const stats = await statsResponse.json();
+                        if (stats.database) {
+                            document.getElementById('userCount').textContent = 
+                                (stats.database.total_users || 0).toLocaleString();
+                            document.getElementById('stickerCount').textContent = 
+                                (stats.database.total_stickers || 0).toLocaleString();
+                            document.getElementById('todayStickers').textContent = 
+                                (stats.database.daily_stickers || 0).toLocaleString();
+                        }
+                    }
+                } catch (statsError) {
+                    console.log('Расширенная статистика недоступна');
+                }
+                
+            } catch (error) {
+                console.error('Ошибка загрузки статистики:', error);
+                document.getElementById('statusBadge').innerHTML = '❌ Ошибка подключения';
+                document.getElementById('statusBadge').style.background = 'rgba(255, 107, 107, 0.2)';
+                document.getElementById('statusBadge').style.color = '#ff6b6b';
+                document.getElementById('systemStatus').innerHTML = '<span style="color: #ff6b6b;">● Ошибка</span>';
+            }
+        }
+
+        // Загружаем статистику при загрузке страницы
+        document.addEventListener('DOMContentLoaded', loadStats);
+        
+        // Обновляем каждую минуту
+        setInterval(loadStats, 60000);
+        
+        // Анимация при скролле
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
             });
+        }, observerOptions);
+        
+        // Наблюдаем за элементами с анимацией
+        document.querySelectorAll('.feature-card, .stat-card').forEach(card => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(card);
+        });
     </script>
 </body>
 </html>
