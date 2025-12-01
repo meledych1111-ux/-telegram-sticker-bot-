@@ -1,8 +1,7 @@
 {
   "functions": {
     "api/bot.js": {
-      "maxDuration": 10,
-      "runtime": "nodejs24.x"
+      "maxDuration": 10
     }
   },
   "rewrites": [
@@ -10,19 +9,5 @@
       "source": "/(.*)",
       "destination": "/api/bot"
     }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store"
-        }
-      ]
-    }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
