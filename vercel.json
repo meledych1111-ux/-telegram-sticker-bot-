@@ -8,12 +8,16 @@
     {
       "src": "api/check-env.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/",
-      "dest": "/api/bot.js"
+      "dest": "/public/index.html"
     },
     {
       "src": "/api/bot",
@@ -29,5 +33,8 @@
       "src": "/(.*)",
       "dest": "/api/bot.js"
     }
-  ]
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
