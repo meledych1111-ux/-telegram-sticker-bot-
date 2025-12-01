@@ -3,10 +3,15 @@
   "builds": [
     {
       "src": "api/bot.js",
-      "use": "@vercel/node",
-      "config": {
-        "nodeVersion": "24.x"
-      }
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/check-env.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/version.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
@@ -20,6 +25,16 @@
       "methods": ["POST", "GET"]
     },
     {
+      "src": "/api/check-env",
+      "dest": "/api/check-env.js",
+      "methods": ["GET"]
+    },
+    {
+      "src": "/api/version",
+      "dest": "/api/version.js",
+      "methods": ["GET"]
+    },
+    {
       "src": "/(.*)",
       "dest": "/api/bot.js"
     }
@@ -29,6 +44,19 @@
       "maxDuration": 30,
       "memory": 1024,
       "runtime": "nodejs24.x"
+    },
+    "api/check-env.js": {
+      "maxDuration": 10,
+      "memory": 512,
+      "runtime": "nodejs24.x"
+    },
+    "api/version.js": {
+      "maxDuration": 10,
+      "memory": 512,
+      "runtime": "nodejs24.x"
     }
+  },
+  "env": {
+    "NODE_ENV": "production"
   }
 }
