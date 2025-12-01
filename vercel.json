@@ -4,14 +4,6 @@
     {
       "src": "api/bot.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "api/check-env.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
     }
   ],
   "routes": [
@@ -25,16 +17,17 @@
       "methods": ["POST", "GET"]
     },
     {
-      "src": "/api/check-env",
-      "dest": "/api/check-env.js",
-      "methods": ["GET"]
-    },
-    {
       "src": "/(.*)",
       "dest": "/api/bot.js"
     }
   ],
   "env": {
     "NODE_ENV": "production"
+  },
+  "functions": {
+    "api/bot.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
   }
 }
