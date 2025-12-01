@@ -28,3 +28,11 @@
   "author": "",
   "license": "MIT"
 }
+{
+  "scripts": {
+    "start": "node api/bot.js",
+    "dev": "node api/bot.js",
+    "setup-webhook": "node scripts/setupWebhook.js",
+    "check-webhook": "curl -s https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo | jq ."
+  }
+}
