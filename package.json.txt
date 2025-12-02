@@ -1,13 +1,13 @@
 {
-  "name": "telegram-sticker-bot",
+  "name": "sticker-bot",
   "version": "1.0.0",
-  "main": "api/bot.js",
-  "scripts": {
-    "dev": "vercel dev",
-    "setup-webhook": "node scripts/setupWebhook.js",
-    "deploy": "vercel --prod"
+  "engines": {
+    "node": "18.x || 20.x || 22.x || 24.x"
   },
-"engines": {
-  "node": ">=20 <=24" 
+  "dependencies": {
+    "sharp": "^0.33.0"
+  },
+  "scripts": {
+    "postinstall": "npm rebuild sharp --platform=linux --arch=x64 --libc=glibc"
   }
 }
