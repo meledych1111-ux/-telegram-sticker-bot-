@@ -1,8 +1,9 @@
 // ⚡ ПОЛНОЦЕННЫЙ STICKER BOT
 const MenuBuilder = require('../lib/menuBuilder');
 const { downloadImage } = require('../lib/imageProcessor');
-
+const stickerCreator = require('../lib/stickerCreator');
 // 📦 Хранилище временных данных пользователей
+const userSessions = {};
 const userSessions = {};
 
 module.exports = async (req, res) => {
@@ -371,7 +372,61 @@ async function getFileUrl(BOT_URL, fileId) {
     return null;
   }
 }
-
+// 🎭 ВЫБОР ЭФФЕКТА И РЕАЛЬНОЕ СОЗДАНИЕ СТИКЕРА
+async function handleEffectSelection(BOT_URL, chatId, effectName, username) {
+  const session = userSessions[chatId];
+  
+  if (!session || !session.photoUrl) {
+    await sendMessage(BOT_URL, chatId, '❌ *Сначала отправьте фото!*', MenuBuilder.getMainMenu());
+    return;
+  }
+  
+  await sendMessage(BOT_URL, chatId, `🎭 *Создаю стикер с эффектом "${effectName}"...*`, MenuBuilder.removeMenu());
+  
+  try {
+    const imageBuffer = await stickerCreator.downloadImage(session.photoUrl);
+    
+    // Настройки для разных эффектов
+    const options = {};
+    
+    if (effectName.includes('Текст')) {
+      options.text = 'Cool!';
+      effectName = 'текст';
+    } else if (effectName.includes('Золотая рамка')) {
+      options.frameColor = 'gold';
+      effectName = 'рамка';
+    } else if (effectName.includes('Радужная рамка')) {
+      options.frameColor = 'rainbow';
+      effectName = 'рамка';
+    } else if (effectName === 'Градиент') {
+      options.gradientColor = 'rgba(255,105,180,0.3)';
+    }
+    
+    // Создаем стикер с эффектом
+    const stickerBuffer = await stickerCreator.createSticker(imageBuffer, effectName, options);
+    
+    // Отправляем стикер
+    await stickerCreator.sendSticker(process.env.TELEGRAM_BOT_TOKEN, chatId, stickerBuffer);
+    
+    // Меню действий
+    const stickerId = Date.now();
+    await sendMessage(BOT_URL, chatId,
+      `✅ *Стикер готов!* Эффект: *${effectName}*\n\n` +
+      '✨ *Что дальше?*',
+      MenuBuilder.getStickerActions(stickerId)
+    );
+    
+    console.log(`🎨 Создан стикер для ${username}: ${effectName}`);
+    delete userSessions[chatId];
+    
+  } catch (error) {
+    console.error('❌ Ошибка создания:', error);
+    await sendMessage(BOT_URL, chatId, 
+      '❌ *Не удалось создать стикер*\nПопробуйте другое фото или эффект!',
+      MenuBuilder.getMainMenu()
+    );
+  }
+}
 // 🔙 ОТВЕТ НА CALLBACK QUERY
 async function answerCallbackQuery(BOT_URL, callbackId, text = '') {
   try {
