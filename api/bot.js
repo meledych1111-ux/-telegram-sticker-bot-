@@ -1,15 +1,15 @@
-// ⚡ ПОЛНОЦЕННЫЙ STICKER BOT
+// ⚡ ПОЛНОЦЕННЫЙ STICKER BOT С БАЗОЙ ДАННЫХ
 const MenuBuilder = require('../lib/menuBuilder');
 const stickerCreator = require('../lib/stickerCreator');
 
-// 📌 ДОБАВЛЕНО: Подключение базы данных
+// 📌 ДОБАВЛЕНО: Подключение базы данных Neon PostgreSQL
 let database;
-try { 
-  database = require('../lib/database'); 
-  console.log('✅ Database module loaded');
-} catch(e) { 
-  console.log('⚠️ Database not available:', e.message); 
-  database = null; 
+try {
+  database = require('../lib/database');
+  console.log('✅ База данных Neon подключена');
+} catch (error) {
+  console.log('⚠️ База данных не доступна:', error.message);
+  database = null;
 }
 
 // 📦 Хранилище временных данных пользователей
@@ -70,15 +70,17 @@ module.exports = async (req, res) => {
         const chatId = message.chat.id;
         const text = message.text || '';
         const username = message.from?.username || 'Пользователь';
+        const firstName = message.from?.first_name || '';
 
         // 🆕 НАЧАЛО РАБОТЫ
         if (text === '/start') {
-          // 📌 ДОБАВЛЕНО: Сохранение пользователя в базу
+          // 📌 СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БАЗУ ДАННЫХ
           if (database) {
             try {
-              await database.saveUser(chatId, username, message.from?.first_name || '');
-            } catch (e) {
-              console.log('⚠️ Could not save user to DB:', e.message);
+              await database.saveUser(chatId, username, firstName);
+              console.log(`✅ Пользователь ${username} сохранен в базу`);
+            } catch (error) {
+              console.log('⚠️ Не удалось сохранить пользователя:', error.message);
             }
           }
           
@@ -146,44 +148,55 @@ module.exports = async (req, res) => {
         }
         // 📊 СТАТИСТИКА
         else if (text === '📊 Статистика') {
-          // 📌 ОБНОВЛЕНО: Статистика из базы данных
-          let statsMessage;
+          // 📌 ПОЛУЧАЕМ СТАТИСТИКУ ИЗ БАЗЫ ДАННЫХ
+          let statsText;
           
           if (database) {
             try {
               const stats = await database.getUserStats(chatId);
-              statsMessage = `📊 *Статистика @${username}:*\n\n` +
+              const topUsers = await database.getTopUsers(50);
+              
+              // Находим место в рейтинге
+              let rank = '-';
+              for (let i = 0; i < topUsers.length; i++) {
+                if (topUsers[i].username === username || topUsers[i].first_name === firstName) {
+                  rank = `#${i + 1}`;
+                  break;
+                }
+              }
+              
+              statsText = `📊 *Статистика @${username}:*\n\n` +
                 `🎨 Создано стикеров: *${stats.total_stickers || 0}*\n` +
                 `⭐ Избранных: *${stats.favorites_count || 0}*\n` +
                 `📚 Подборок: *${stats.collections_count || 0}*\n` +
                 `🎭 Использовано эффектов: *${stats.effects_used || 0}*\n` +
-                `🏆 Рейтинг: *#${stats.rank || '-'}*\n\n` +
-                '_Данные из базы Neon_ ✅';
+                `🏆 Место в рейтинге: *${rank}*\n\n` +
+                '_Данные из Neon PostgreSQL_ 🗄️';
             } catch (error) {
-              console.log('⚠️ DB stats error:', error.message);
-              statsMessage = `📊 *Статистика @${username}:*\n\n` +
+              console.log('⚠️ Ошибка получения статистики:', error.message);
+              statsText = `📊 *Статистика @${username}:*\n\n` +
                 '🎨 Создано стикеров: *0*\n' +
                 '⭐ Избранных: *0*\n' +
                 '📚 Подборок: *0*\n' +
                 '🎭 Использовано эффектов: *0*\n' +
-                '🏆 Рейтинг: *-*\n\n' +
+                '🏆 Место в рейтинге: *-*\n\n' +
                 '_База данных обновляется..._ 🔄';
             }
           } else {
-            statsMessage = `📊 *Статистика @${username}:*\n\n` +
+            statsText = `📊 *Статистика @${username}:*\n\n` +
               '🎨 Создано стикеров: *0*\n' +
               '⭐ Избранных: *0*\n' +
               '📚 Подборок: *0*\n' +
               '🎭 Использовано эффектов: *0*\n' +
-              '🏆 Рейтинг: *-*\n\n' +
+              '🏆 Место в рейтинге: *-*\n\n' +
               '_База данных скоро будет подключена_';
           }
           
-          await sendMessage(BOT_URL, chatId, statsMessage, MenuBuilder.getMainMenu());
+          await sendMessage(BOT_URL, chatId, statsText, MenuBuilder.getMainMenu());
         }
         // 🏆 ТОП
         else if (text === '🏆 Топ') {
-          // 📌 ОБНОВЛЕНО: Топ из базы данных
+          // 📌 ПОЛУЧАЕМ ТОП ИЗ БАЗЫ ДАННЫХ
           let topMessage;
           
           if (database) {
@@ -206,9 +219,9 @@ module.exports = async (req, res) => {
                   topMessage += `${medal} ${name} - ${user.stickers_created} стикеров${effects}\n`;
                 });
               }
-              topMessage += '\n_Данные из базы Neon_ ✅';
+              topMessage += '\n_Данные из Neon PostgreSQL_ 🗄️';
             } catch (error) {
-              console.log('⚠️ DB top error:', error.message);
+              console.log('⚠️ Ошибка получения топа:', error.message);
               topMessage = '🏆 *Топ создателей стикеров:*\n\n' +
                 '🥇 Пока никто не создал стикеров\n' +
                 '🥈 Будь первым!\n' +
@@ -247,11 +260,11 @@ module.exports = async (req, res) => {
         }
         // 📸 ОБРАБОТКА ФОТО
         else if (message.photo) {
-          await handlePhoto(BOT_URL, chatId, message.photo, username);
+          await handlePhoto(BOT_URL, chatId, message.photo, username, firstName);
         }
         // 📎 ОБРАБОТКА ДОКУМЕНТОВ
         else if (message.document && message.document.mime_type?.startsWith('image/')) {
-          await handleDocument(BOT_URL, chatId, message.document, username);
+          await handleDocument(BOT_URL, chatId, message.document, username, firstName);
         }
         // 🎭 ВЫБОР ЭФФЕКТА (ВСЕ НОВЫЕ ЭФФЕКТЫ)
         else if ([
@@ -259,10 +272,20 @@ module.exports = async (req, res) => {
           'градиент', 'перламутр', 'текст', 'золотая рамка', 
           'радужная рамка', 'инстаграм', 'без эффекта'
         ].includes(text.toLowerCase())) {
-          await handleEffectSelection(BOT_URL, chatId, text, username);
+          await handleEffectSelection(BOT_URL, chatId, text, username, firstName);
         }
         // 📝 НАЗВАНИЕ ПОДБОРКИ
         else if (userSessions[chatId]?.waitingFor === 'collection_name') {
+          // 📌 СОЗДАЕМ ПОДБОРКУ В БАЗЕ ДАННЫХ
+          if (database) {
+            try {
+              await database.createCollection(chatId, text);
+              console.log(`✅ Подборка "${text}" создана в базе`);
+            } catch (error) {
+              console.log('⚠️ Не удалось создать подборку в базе:', error.message);
+            }
+          }
+          
           await sendMessage(BOT_URL, chatId,
             `✅ Подборка "${text}" создана!\n\n` +
             'Теперь вы можете добавлять в неё стикеры.\n' +
@@ -342,17 +365,26 @@ async function showCollectionsMenu(BOT_URL, chatId) {
 }
 
 // 🖼️ ОБРАБОТКА ФОТО
-async function handlePhoto(BOT_URL, chatId, photos, username) {
+async function handlePhoto(BOT_URL, chatId, photos, username, firstName) {
   await sendMessage(BOT_URL, chatId, '🔄 *Скачиваю фото...*', MenuBuilder.removeMenu());
   
   const bestPhoto = photos[photos.length - 1];
   const fileId = bestPhoto.file_id;
   const fileUrl = await getFileUrl(BOT_URL, fileId);
   
-  // 📌 ДОБАВЛЕНО: Сохраняем file_id для базы
+  // 📌 СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БАЗУ ЕСЛИ ЕЩЁ НЕ СОХРАНЕН
+  if (database) {
+    try {
+      await database.saveUser(chatId, username, firstName);
+    } catch (error) {
+      console.log('⚠️ Не удалось обновить пользователя:', error.message);
+    }
+  }
+  
+  // Сохраняем фото в сессии
   userSessions[chatId] = {
     photoUrl: fileUrl,
-    fileId: fileId,
+    fileId: fileId, // 📌 Сохраняем file_id для базы данных
     waitingFor: 'effect_selection'
   };
   
@@ -373,14 +405,24 @@ async function handlePhoto(BOT_URL, chatId, photos, username) {
 }
 
 // 📎 ОБРАБОТКА ДОКУМЕНТОВ
-async function handleDocument(BOT_URL, chatId, document, username) {
+async function handleDocument(BOT_URL, chatId, document, username, firstName) {
   await sendMessage(BOT_URL, chatId, '🔄 *Загружаю изображение...*', MenuBuilder.removeMenu());
   
-  const fileUrl = await getFileUrl(BOT_URL, document.file_id);
+  const fileId = document.file_id;
+  const fileUrl = await getFileUrl(BOT_URL, fileId);
+  
+  // 📌 СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БАЗУ ЕСЛИ ЕЩЁ НЕ СОХРАНЕН
+  if (database) {
+    try {
+      await database.saveUser(chatId, username, firstName);
+    } catch (error) {
+      console.log('⚠️ Не удалось обновить пользователя:', error.message);
+    }
+  }
   
   userSessions[chatId] = {
     photoUrl: fileUrl,
-    fileId: document.file_id,
+    fileId: fileId, // 📌 Сохраняем file_id для базы данных
     waitingFor: 'effect_selection'
   };
   
@@ -397,7 +439,7 @@ async function handleDocument(BOT_URL, chatId, document, username) {
 }
 
 // 🎭 ВЫБОР ЭФФЕКТА И РЕАЛЬНОЕ СОЗДАНИЕ СТИКЕРА
-async function handleEffectSelection(BOT_URL, chatId, effectName, username) {
+async function handleEffectSelection(BOT_URL, chatId, effectName, username, firstName) {
   const session = userSessions[chatId];
   
   if (!session || !session.photoUrl) {
@@ -432,22 +474,31 @@ async function handleEffectSelection(BOT_URL, chatId, effectName, username) {
     // Отправляем стикер
     const sendResult = await stickerCreator.sendSticker(process.env.TELEGRAM_BOT_TOKEN, chatId, stickerBuffer);
     
-    // 📌 ДОБАВЛЕНО: Сохранение в базу данных
+    // 📌 СОХРАНЯЕМ СТИКЕР В БАЗУ ДАННЫХ
     if (database && session.fileId && sendResult.ok) {
       try {
+        // Маппинг названий эффектов
         const effectMap = {
-          'винтаж': 'vintage', 'черно-белый': 'grayscale', 'чб': 'grayscale',
-          'сепия': 'sepia', 'пикселизация': 'pixelate', 'размытие': 'blur',
-          'градиент': 'gradient', 'перламутр': 'pearl', 'текст': 'text',
-          'золотая рамка': 'gold_frame', 'радужная рамка': 'rainbow_frame',
-          'инстаграм': 'instagram', 'без эффекта': 'none'
+          'винтаж': 'vintage',
+          'черно-белый': 'grayscale',
+          'чб': 'grayscale',
+          'сепия': 'sepia',
+          'пикселизация': 'pixelate',
+          'размытие': 'blur',
+          'градиент': 'gradient',
+          'перламутр': 'pearl',
+          'текст': 'text',
+          'золотая рамка': 'gold_frame',
+          'радужная рамка': 'rainbow_frame',
+          'инстаграм': 'instagram',
+          'без эффекта': 'none'
         };
         
-        const dbEffect = effectMap[effectName.toLowerCase()] || 'none';
-        await database.saveSticker(chatId, session.fileId, dbEffect, stickerBuffer.length);
-        console.log(`✅ Saved to DB: ${dbEffect}`);
-      } catch (dbError) {
-        console.log('⚠️ DB save error:', dbError.message);
+        const dbEffectName = effectMap[effectName.toLowerCase()] || 'none';
+        await database.saveSticker(chatId, session.fileId, dbEffectName, stickerBuffer.length);
+        console.log(`✅ Стикер сохранен в базу с эффектом: ${dbEffectName}`);
+      } catch (error) {
+        console.log('⚠️ Не удалось сохранить стикер в базу:', error.message);
       }
     }
     
