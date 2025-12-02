@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "form-data": "^4.0.0",
-    "canvas": "^3.1.0"
+    "canvas": "^3.1.0",
+    "postgres": "^3.4.3"
   },
   "engines": {
     "node": "14.x || 16.x || 18.x || 20.x || 22.x || 24.x"
