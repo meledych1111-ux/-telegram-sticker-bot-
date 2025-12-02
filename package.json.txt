@@ -7,7 +7,7 @@
     "setup-webhook": "node scripts/setupWebhook.js",
     "deploy": "vercel --prod"
   },
-  "engines": {
-    "node": "20.x"
+"engines": {
+  "node": ">=20 <=24" 
   }
 }
