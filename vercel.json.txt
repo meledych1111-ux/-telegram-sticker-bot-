@@ -4,10 +4,6 @@
     {
       "src": "api/bot.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "public/**/*",
-      "use": "@vercel/static"
     }
   ],
   "routes": [
@@ -15,10 +11,6 @@
       "src": "/api/bot",
       "dest": "/api/bot.js",
       "methods": ["GET", "POST", "OPTIONS"]
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/public/$1"
     }
   ]
 }
