@@ -5,18 +5,14 @@
   "main": "api/bot.js",
   "scripts": {
     "dev": "vercel dev",
-    "setup-webhook": "node scripts/setupWebhook.js",
-    "update-db": "node scripts/updateDatabase.js",
     "deploy": "vercel --prod",
-    "postinstall": "npm rebuild sharp --platform=linux --arch=x64"
+    "postinstall": "npm rebuild --platform=linux --arch=x64"
   },
   "dependencies": {
-    "axios": "^1.6.0",
-    "sharp": "^0.33.4",  // ← ОБНОВЛЕНО ДО ПОСЛЕДНЕЙ ВЕРСИИ
-    "postgres": "^3.4.3",
-    "form-data": "^4.0.0"
+    "form-data": "^4.0.0",
+    "canvas": "^3.1.0"
   },
   "engines": {
-   "node": "18.x || 20.x || 22.x || 24.x"
+    "node": "14.x || 16.x || 18.x || 20.x || 22.x || 24.x"
   }
 }
