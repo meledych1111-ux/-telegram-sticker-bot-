@@ -1,6 +1,4 @@
-// 🔗 НАСТРОЙКА ВЕБХУКА ДЛЯ TELEGRAM BOT API
-const axios = require('axios');
-
+// 🔗 НАСТРОЙКА ВЕБХУКА ДЛЯ TELEGRAM BOT API (Node.js 20+)
 async function setupWebhook() {
   // Получаем переменные из окружения Vercel
   const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -28,31 +26,38 @@ async function setupWebhook() {
   console.log(`🔗 Webhook URL: ${webhookUrl}`);
 
   try {
-    // Устанавливаем вебхук через Telegram Bot API
-    const response = await axios.post(
+    // Устанавливаем вебхук через Telegram Bot API (используем встроенный fetch)
+    const response = await fetch(
       `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`,
       {
-        url: webhookUrl,
-        max_connections: 40,
-        allowed_updates: ['message', 'callback_query']
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: webhookUrl,
+          max_connections: 40,
+          allowed_updates: ['message', 'callback_query']
+        })
       }
     );
 
+    const data = await response.json();
+
     // Проверяем результат от Telegram API
-    if (response.data.ok) {
+    if (data.ok) {
       console.log('✅ ВЕБХУК УСПЕШНО НАСТРОЕН ДЛЯ TELEGRAM BOT API!');
       console.log(`📝 Telegram Bot API теперь отправляет запросы на: ${webhookUrl}`);
       
       // Дополнительная проверка вебхука
-      const infoResponse = await axios.get(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
-      console.log('📊 Информация о вебхуке:', JSON.stringify(infoResponse.data.result, null, 2));
+      const infoResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
+      const info = await infoResponse.json();
+      console.log('📊 Информация о вебхуке:', JSON.stringify(info.result, null, 2));
       
     } else {
-      console.error('❌ Ошибка настройки вебхука в Telegram API:', response.data.description);
+      console.error('❌ Ошибка настройки вебхука в Telegram API:', data.description);
     }
 
   } catch (error) {
-    console.error('❌ Ошибка настройки вебхука:', error.response?.data || error.message);
+    console.error('❌ Ошибка настройки вебхука:', error.message);
     console.log('💡 Проверьте в Vercel:');
     console.log('   - Правильность BOT_TOKEN в Environment Variables');
     console.log('   - Правильность VERCEL_URL в Environment Variables');
