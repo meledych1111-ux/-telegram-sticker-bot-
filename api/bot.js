@@ -1,6 +1,5 @@
 // ⚡ ПОЛНОЦЕННЫЙ STICKER BOT
 const MenuBuilder = require('../lib/menuBuilder');
-const { downloadImage } = require('../lib/imageProcessor');
 const stickerCreator = require('../lib/stickerCreator');
 
 // 📦 Хранилище временных данных пользователей
