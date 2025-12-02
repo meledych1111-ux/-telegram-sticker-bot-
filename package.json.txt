@@ -1,17 +1,13 @@
 {
   "name": "telegram-sticker-bot",
   "version": "1.0.0",
-  "description": "Telegram bot for creating stickers with effects, collections and favorites",
   "main": "api/bot.js",
   "scripts": {
     "dev": "vercel dev",
     "setup-webhook": "node scripts/setupWebhook.js",
     "deploy": "vercel --prod"
   },
-  "dependencies": {
-    "form-data": "^4.0.0",
-    "postgres": "^3.4.3"
-  },
+  "dependencies": {},
   "engines": {
     "node": "20.x"
   }
