@@ -2,8 +2,8 @@
 const MenuBuilder = require('../lib/menuBuilder');
 const { downloadImage } = require('../lib/imageProcessor');
 const stickerCreator = require('../lib/stickerCreator');
+
 // 📦 Хранилище временных данных пользователей
-const userSessions = {};
 const userSessions = {};
 
 module.exports = async (req, res) => {
@@ -69,7 +69,7 @@ module.exports = async (req, res) => {
             'Я помогу вам создавать крутые стикеры из ваших изображений!\n\n' +
             '✨ *Что я умею:*\n' +
             '• Создавать стикеры из фото\n' +
-            '• Применять эффекты (винтаж, ЧБ, сепия)\n' +
+            '• Применять эффекты (винтаж, ЧБ, сепия, градиент, рамки, текст)\n' +
             '• Сохранять в избранное и подборки\n' +
             '• Показывать статистику и рейтинг\n\n' +
             '🎯 *Начните с кнопки ниже!*',
@@ -163,7 +163,7 @@ module.exports = async (req, res) => {
             '📚 *Подборки:*\n' +
             'Создавай тематические коллекции\n\n' +
             '🎭 *Эффекты:*\n' +
-            'Винтаж, ЧБ, сепия, пикселизация\n\n' +
+            'Винтаж, ЧБ, сепия, градиент, рамки, текст\n\n' +
             '💎 *Полная версия скоро!*',
             MenuBuilder.getMainMenu()
           );
@@ -176,8 +176,12 @@ module.exports = async (req, res) => {
         else if (message.document && message.document.mime_type?.startsWith('image/')) {
           await handleDocument(BOT_URL, chatId, message.document, username);
         }
-        // 🎭 ВЫБОР ЭФФЕКТА
-        else if (['винтаж', 'черно-белый', 'сепия', 'пикселизация', 'размытие'].includes(text.toLowerCase())) {
+        // 🎭 ВЫБОР ЭФФЕКТА (ВСЕ НОВЫЕ ЭФФЕКТЫ)
+        else if ([
+          'винтаж', 'черно-белый', 'сепия', 'пикселизация', 'размытие',
+          'градиент', 'перламутр', 'текст', 'золотая рамка', 
+          'радужная рамка', 'инстаграм', 'без эффекта'
+        ].includes(text.toLowerCase())) {
           await handleEffectSelection(BOT_URL, chatId, text, username);
         }
         // 📝 НАЗВАНИЕ ПОДБОРКИ
@@ -216,21 +220,28 @@ async function sendMainMenu(BOT_URL, chatId) {
   );
 }
 
-// 🎭 МЕНЮ ЭФФЕКТОВ
+// 🎭 МЕНЮ ЭФФЕКТОВ (ОБНОВЛЕННОЕ)
 async function showEffectsMenu(BOT_URL, chatId) {
   const effects = [
-    { name: 'Без эффекта', is_premium: false },
-    { name: 'Винтаж', is_premium: false },
-    { name: 'Черно-белый', is_premium: false },
-    { name: 'Сепия', is_premium: false },
-    { name: 'Пикселизация', is_premium: false },
-    { name: 'Размытие', is_premium: true }
+    { name: 'Без эффекта', is_premium: false, emoji: '🎨' },
+    { name: 'Винтаж', is_premium: false, emoji: '🕰️' },
+    { name: 'Черно-белый', is_premium: false, emoji: '⚫⚪' },
+    { name: 'Сепия', is_premium: false, emoji: '🟤' },
+    { name: 'Пикселизация', is_premium: false, emoji: '🎮' },
+    { name: 'Размытие', is_premium: false, emoji: '🌀' },
+    { name: 'Градиент', is_premium: true, emoji: '🌈' },
+    { name: 'Перламутр', is_premium: true, emoji: '✨' },
+    { name: 'Текст "Cool!"', is_premium: true, emoji: '📝' },
+    { name: 'Золотая рамка', is_premium: true, emoji: '🖼️' },
+    { name: 'Радужная рамка', is_premium: true, emoji: '🌈🖼️' },
+    { name: 'Инстаграм фильтр', is_premium: true, emoji: '📸' }
   ];
   
   await sendMessage(BOT_URL, chatId,
     '🎭 *Эффекты для стикеров*\n\n' +
     'Выберите эффект для следующего стикера:\n' +
-    effects.map(e => `• ${e.name}${e.is_premium ? ' 💎' : ''}`).join('\n'),
+    effects.map(e => `• ${e.emoji || ''} ${e.name}${e.is_premium ? ' 💎' : ''}`).join('\n') +
+    '\n\n💎 *Премиум эффекты доступны всем!*',
     MenuBuilder.getEffectsMenu(effects)
   );
 }
@@ -268,12 +279,13 @@ async function handlePhoto(BOT_URL, chatId, photos, username) {
   
   await sendMessage(BOT_URL, chatId,
     '✅ *Фото получено!*\n\n' +
-    '🎭 *Выберите эффект:*\n' +
-    '• Винтаж\n' +
-    '• Черно-белый\n' +
-    '• Сепия\n' +
-    '• Пикселизация\n' +
-    '• Размытие\n\n' +
+    '🎭 *Выберите эффект:*\n\n' +
+    '✨ *Базовые:*\n' +
+    '• Винтаж • ЧБ • Сепия\n\n' +
+    '💎 *Премиум:*\n' +
+    '• Градиент • Перламутр\n' +
+    '• Текст • Золотая рамка\n' +
+    '• Радужная рамка • Инстаграм\n\n' +
     '📝 *Напишите название эффекта*',
     MenuBuilder.removeMenu()
   );
@@ -295,83 +307,15 @@ async function handleDocument(BOT_URL, chatId, document, username) {
   await sendMessage(BOT_URL, chatId,
     '✅ *Изображение загружено!*\n\n' +
     '✨ *Выберите эффект:*\n' +
-    '• Винтаж\n' +
-    '• Черно-белый\n' +
-    '• Сепия\n' +
-    '• Пикселизация\n' +
-    '• Размытие\n\n' +
+    '• Винтаж • ЧБ • Сепия\n' +
+    '• Градиент • Перламутр\n' +
+    '• Текст • Золотая рамка\n' +
+    '• Радужная рамка • Инстаграм\n\n' +
     '📝 *Напишите название эффекта*',
     MenuBuilder.removeMenu()
   );
 }
 
-// 🎭 ВЫБОР ЭФФЕКТА
-async function handleEffectSelection(BOT_URL, chatId, effectName, username) {
-  const session = userSessions[chatId];
-  
-  if (!session || !session.photoUrl) {
-    await sendMessage(BOT_URL, chatId, '❌ *Сначала отправьте фото!*', MenuBuilder.getMainMenu());
-    return;
-  }
-  
-  await sendMessage(BOT_URL, chatId, `🎭 *Создаю стикер с эффектом "${effectName}"...*`, MenuBuilder.removeMenu());
-  
-  try {
-    // Скачиваем изображение
-    const imageBuffer = await downloadImage(session.photoUrl);
-    
-    // Имитация обработки
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Отправляем сообщение о успехе
-    const stickerId = Date.now();
-    await sendMessage(BOT_URL, chatId,
-      `✅ *Стикер готов!* Эффект: *${effectName}*\n\n` +
-      '✨ *Что дальше?*',
-      MenuBuilder.getStickerActions(stickerId)
-    );
-    
-    console.log(`🎨 Создан стикер для ${username}: ${effectName}`);
-    
-    // Очищаем сессию
-    delete userSessions[chatId];
-    
-  } catch (error) {
-    console.error('❌ Ошибка создания:', error);
-    await sendMessage(BOT_URL, chatId, '❌ *Не удалось создать стикер. Попробуйте другое фото!*', MenuBuilder.getMainMenu());
-  }
-}
-
-// 📤 ОТПРАВКА СООБЩЕНИЯ
-async function sendMessage(BOT_URL, chatId, text, options = {}) {
-  try {
-    await fetch(`${BOT_URL}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true,
-        ...options
-      })
-    });
-  } catch (error) {
-    console.error('❌ Ошибка отправки:', error.message);
-  }
-}
-
-// 🔗 ПОЛУЧЕНИЕ URL ФАЙЛА
-async function getFileUrl(BOT_URL, fileId) {
-  try {
-    const response = await fetch(`${BOT_URL}/getFile?file_id=${fileId}`);
-    const data = await response.json();
-    return `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${data.result.file_path}`;
-  } catch (error) {
-    console.error('❌ Ошибка получения файла:', error);
-    return null;
-  }
-}
 // 🎭 ВЫБОР ЭФФЕКТА И РЕАЛЬНОЕ СОЗДАНИЕ СТИКЕРА
 async function handleEffectSelection(BOT_URL, chatId, effectName, username) {
   const session = userSessions[chatId];
@@ -427,6 +371,38 @@ async function handleEffectSelection(BOT_URL, chatId, effectName, username) {
     );
   }
 }
+
+// 📤 ОТПРАВКА СООБЩЕНИЯ
+async function sendMessage(BOT_URL, chatId, text, options = {}) {
+  try {
+    await fetch(`${BOT_URL}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+        ...options
+      })
+    });
+  } catch (error) {
+    console.error('❌ Ошибка отправки:', error.message);
+  }
+}
+
+// 🔗 ПОЛУЧЕНИЕ URL ФАЙЛА
+async function getFileUrl(BOT_URL, fileId) {
+  try {
+    const response = await fetch(`${BOT_URL}/getFile?file_id=${fileId}`);
+    const data = await response.json();
+    return `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${data.result.file_path}`;
+  } catch (error) {
+    console.error('❌ Ошибка получения файла:', error);
+    return null;
+  }
+}
+
 // 🔙 ОТВЕТ НА CALLBACK QUERY
 async function answerCallbackQuery(BOT_URL, callbackId, text = '') {
   try {
