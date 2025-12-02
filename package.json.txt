@@ -10,8 +10,7 @@
   },
   "dependencies": {
     "form-data": "^4.0.0",
-    "postgres": "^3.4.3",
-    "jimp": "^0.22.10"
+    "postgres": "^3.4.3"
   },
   "engines": {
     "node": "20.x"
