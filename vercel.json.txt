@@ -5,7 +5,8 @@
       "src": "api/**/*.js",
       "use": "@vercel/node",
       "config": {
-        "runtime": "nodejs20.x"
+        "includeFiles": ["lib/**", "api/**", "package.json"],
+        "runtime": "nodejs20.x"  // ← ЯВНО УКАЗЫВАЕМ ВЕРСИЮ
       }
     },
     {
