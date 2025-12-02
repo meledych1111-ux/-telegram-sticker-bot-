@@ -26,6 +26,16 @@ module.exports = async (req, res) => {
   if (req.method === 'POST') {
     try {
       console.log('📨 Получено сообщение от Telegram');
+      
+      // Проверяем наличие TELEGRAM_BOT_TOKEN
+      if (!process.env.TELEGRAM_BOT_TOKEN) {
+        console.error('❌ TELEGRAM_BOT_TOKEN не установлен');
+        return res.status(200).json({ 
+          status: 'error', 
+          error: 'TELEGRAM_BOT_TOKEN не настроен. Добавьте в Vercel Environment Variables' 
+        });
+      }
+      
       await processMessage(req.body);
       return res.status(200).json({ status: 'ok' });
     } catch (error) {
