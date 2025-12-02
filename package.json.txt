@@ -5,12 +5,11 @@
   "main": "api/bot.js",
   "scripts": {
     "dev": "vercel dev",
-    "setup-webhook": "node scripts/setupWebhook.js",
+    "setup-webhook": "TELEGRAM_BOT_TOKEN=ваш_токен VERCEL_URL=https://ваш-проект.vercel.app node scripts/setupWebhook.js",
     "update-db": "node scripts/updateDatabase.js",
     "deploy": "vercel --prod"
   },
   "dependencies": {
-    "axios": "^1.6.0",
     "form-data": "^4.0.0",
     "sharp": "^0.32.0",
     "postgres": "^3.4.3"
