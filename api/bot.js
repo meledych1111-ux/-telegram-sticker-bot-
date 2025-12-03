@@ -1,16 +1,54 @@
-api/bot.js - ИСПРАВЛЕННЫЙ ИМПОРТ
+// api/bot.js - ДОБАВЬТЕ В НАЧАЛО
+console.log('🚀 ============ ЗАГРУЗКА STICKER BOT ============');
+console.log('📅 Время:', new Date().toISOString());
+console.log('🌐 NODE_ENV:', process.env.NODE_ENV || 'development');
+console.log('🔑 TELEGRAM_BOT_TOKEN:', process.env.TELEGRAM_BOT_TOKEN ? '✅ Установлен' : '❌ НЕ УСТАНОВЛЕН');
+console.log('🗄️ DATABASE_URL:', process.env.DATABASE_URL ? '✅ Установлен' : '❌ НЕ УСТАНОВЛЕН');
+
 const MenuBuilder = require('../lib/menuBuilder');
 const stickerCreator = require('../lib/stickerCreator');
 
-// 📌 ПРАВИЛЬНЫЙ ИМПОРТ БАЗЫ ДАННЫХ ИЗ lib/
+// 📌 ИМПОРТ БАЗЫ ДАННЫХ С ПОДРОБНОЙ ОТЛАДКОЙ
+console.log('🔍 Импортирую базу данных...');
 let database;
+
 try {
-  database = require('../lib/database'); // ← Импорт из папки lib/
-  console.log('✅ База данных подключена');
+  database = require('../lib/database');
+  console.log('✅ Файл lib/database.js загружен');
+  
+  // Проверяем ключевые функции
+  console.log('🔧 Проверка функций базы данных:');
+  console.log('   • saveUser:', typeof database.saveUser === 'function' ? '✅' : '❌');
+  console.log('   • getUserStats:', typeof database.getUserStats === 'function' ? '✅' : '❌');
+  console.log('   • getTopUsers:', typeof database.getTopUsers === 'function' ? '✅' : '❌');
+  
 } catch (error) {
-  console.log('⚠️ База данных не доступна:', error.message);
+  console.error('❌ ОШИБКА ЗАГРУЗКИ БАЗЫ ДАННЫХ:', error.message);
   database = null;
 }
+
+// 📦 Если база данных не загрузилась, создаем заглушку
+if (!database || typeof database !== 'object') {
+  console.error('⚠️ База данных недоступна! Работаем в режиме заглушки.');
+  
+  database = {
+    saveUser: async (chatId, username, firstName) => {
+      console.log(`🔧 [ЗАГЛУШКА] saveUser: ${chatId}, ${username}`);
+      return null;
+    },
+    getUserStats: async (chatId) => {
+      console.log(`🔧 [ЗАГЛУШКА] getUserStats: ${chatId}`);
+      return { username: 'Гость', total_stickers: 0, registration_date: new Date() };
+    },
+    getTopUsers: async (limit = 10) => {
+      console.log(`🔧 [ЗАГЛУШКА] getTopUsers: лимит ${limit}`);
+      return [];
+    }
+  };
+}
+
+console.log('✅ Все библиотеки загружены');
+console.log('================================================\n');
 
 // 📦 Хранилище временных данных пользователей
 const userSessions = {};
