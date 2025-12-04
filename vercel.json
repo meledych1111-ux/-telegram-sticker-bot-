@@ -11,56 +11,12 @@
       "src": "/api/bot",
       "dest": "/api/bot.js",
       "methods": ["GET", "POST", "OPTIONS"]
-    },
-    {
-      "src": "/api/health",
-      "dest": "/api/health.js",
-      "methods": ["GET"]
-    },
-    {
-      "src": "/api/stats",
-      "dest": "/api/bot.js",
-      "methods": ["GET"]
-    },
-    {
-      "src": "/api/admin/(.*)",
-      "dest": "/api/bot.js",
-      "methods": ["GET"]
     }
   ],
   "functions": {
     "api/bot.js": {
       "maxDuration": 30,
-      "memory": 1024,
-      "includeFiles": [
-        "database.js",
-        "package.json"
-      ]
+      "memory": 1024
     }
-  },
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET,POST,OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "X-Requested-With, Content-Type, Accept, Authorization"
-        }
-      ]
-    }
-  ],
-  "env": {
-    "NODE_ENV": "production",
-    "TELEGRAM_BOT_TOKEN": "@telegram-bot-token",
-    "DATABASE_URL": "@neon-database-url",
-    "ALLOWED_ADMINS": "@allowed-admins"
   }
 }
