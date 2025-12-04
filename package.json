@@ -19,6 +19,16 @@
       "src": "/set-webhook",
       "dest": "/api/bot.js",
       "methods": ["GET"]
+    },
+    {
+      "src": "/health",
+      "dest": "/api/bot.js",
+      "methods": ["GET"]
+    },
+    {
+      "src": "/debug",
+      "dest": "/api/bot.js",
+      "methods": ["GET"]
     }
   ],
   "functions": {
@@ -37,10 +47,9 @@
     }
   },
   "env": {
+    "NODE_ENV": "production",
     "TELEGRAM_BOT_TOKEN": "@sticker_bot_token",
-    "ADMIN_IDS": "@admin_ids",
     "DATABASE_URL": "@neon_sticker_db_url",
-    "REDIS_URL": "@redis_url",
     "LOG_LEVEL": "info",
     "MAX_STICKER_SIZE": "512000",
     "ALLOWED_FORMATS": "png,jpg,jpeg,webp"
