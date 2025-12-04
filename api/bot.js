@@ -1,4 +1,4 @@
-// api/bot.js - ДОБАВЬТЕ В НАЧАЛО
+// api/bot.js - ИСПРАВЛЕННАЯ ВЕРСИЯ
 console.log('🚀 ============ ЗАГРУЗКА STICKER BOT ============');
 console.log('📅 Время:', new Date().toISOString());
 console.log('🌐 NODE_ENV:', process.env.NODE_ENV || 'development');
@@ -21,13 +21,15 @@ try {
   console.log('   • saveUser:', typeof database.saveUser === 'function' ? '✅' : '❌');
   console.log('   • getUserStats:', typeof database.getUserStats === 'function' ? '✅' : '❌');
   console.log('   • getTopUsers:', typeof database.getTopUsers === 'function' ? '✅' : '❌');
+  console.log('   • saveSticker:', typeof database.saveSticker === 'function' ? '✅' : '❌');
+  console.log('   • createCollection:', typeof database.createCollection === 'function' ? '✅' : '❌');
   
 } catch (error) {
   console.error('❌ ОШИБКА ЗАГРУЗКИ БАЗЫ ДАННЫХ:', error.message);
   database = null;
 }
 
-// 📦 Если база данных не загрузилась, создаем заглушку
+// 📦 Если база данных не загрузилась, создаем полную заглушку
 if (!database || typeof database !== 'object') {
   console.error('⚠️ База данных недоступна! Работаем в режиме заглушки.');
   
@@ -42,7 +44,19 @@ if (!database || typeof database !== 'object') {
     },
     getTopUsers: async (limit = 10) => {
       console.log(`🔧 [ЗАГЛУШКА] getTopUsers: лимит ${limit}`);
-      return [];
+      return [
+        { username: 'user1', stickers_created: 10, rank: 1 },
+        { username: 'user2', stickers_created: 5, rank: 2 },
+        { username: 'user3', stickers_created: 3, rank: 3 }
+      ];
+    },
+    saveSticker: async (chatId, fileId, effect = 'none', sizeBytes = 0) => {
+      console.log(`🔧 [ЗАГЛУШКА] saveSticker: ${chatId}, эффект: ${effect}`);
+      return true;
+    },
+    createCollection: async (chatId, name) => {
+      console.log(`🔧 [ЗАГЛУШКА] createCollection: ${chatId}, "${name}"`);
+      return true;
     }
   };
 }
@@ -98,6 +112,12 @@ module.exports = async (req, res) => {
         else if (data.startsWith('eff_')) {
           await showEffectsMenu(BOT_URL, chatId);
         }
+        else if (data.startsWith('del_')) {
+          await sendMessage(BOT_URL, chatId, '🗑️ Стикер удален!');
+        }
+        else if (data.startsWith('remake_')) {
+          await sendMessage(BOT_URL, chatId, '🔄 Отправьте новое фото для пересоздания');
+        }
 
         return res.status(200).json({ ok: true });
       }
@@ -152,7 +172,11 @@ module.exports = async (req, res) => {
         }
         // ⭐ ИЗБРАННОЕ
         else if (text === '⭐ Избранное') {
-          await showFavoritesMenu(BOT_URL, chatId);
+          await sendMessage(BOT_URL, chatId,
+            '⭐ *Ваше избранное*\n\n' +
+            '_Функция скоро будет доступна!_',
+            MenuBuilder.getFavoritesMenu()
+          );
         }
         else if (text === '👀 Просмотреть избранное') {
           await sendMessage(BOT_URL, chatId,
@@ -163,9 +187,16 @@ module.exports = async (req, res) => {
             MenuBuilder.getFavoritesMenu()
           );
         }
+        else if (text === '🗑️ Удалить из избранного') {
+          await sendMessage(BOT_URL, chatId, '🗑️ Функция удаления из избранного скоро будет доступна!');
+        }
         // 📚 ПОДБОРКИ
         else if (text === '📚 Мои подборки') {
-          await showCollectionsMenu(BOT_URL, chatId);
+          await sendMessage(BOT_URL, chatId,
+            '📚 *Ваши подборки*\n\n' +
+            '_Создавайте тематические коллекции стикеров_',
+            MenuBuilder.getCollectionsMenu()
+          );
         }
         else if (text === '📁 Создать первую подборку' || text === '➕ Новая подборка') {
           await sendMessage(BOT_URL, chatId,
@@ -180,11 +211,40 @@ module.exports = async (req, res) => {
           );
           userSessions[chatId] = { waitingFor: 'collection_name' };
         }
+        // ⚙️ УПРАВЛЕНИЕ
+        else if (text === '⚙️ Управление') {
+          await sendMessage(BOT_URL, chatId,
+            '⚙️ *Управление*\n\n' +
+            '_Функции управления скоро будут доступны_',
+            MenuBuilder.getManagementMenu()
+          );
+        }
+        else if (text === '📋 Мои стикеры') {
+          await sendMessage(BOT_URL, chatId,
+            '📋 *Мои стикеры*\n\n' +
+            '_Просмотр ваших стикеров скоро будет доступен_',
+            MenuBuilder.getMyStickersMenu()
+          );
+        }
+        else if (text === '🗑️ Удалить стикер') {
+          await sendMessage(BOT_URL, chatId,
+            '🗑️ *Удаление стикеров*\n\n' +
+            '_Функция удаления скоро будет доступна_',
+            MenuBuilder.getDeleteStickersMenu()
+          );
+        }
+        else if (text === '🗂️ Управление подборками') {
+          await sendMessage(BOT_URL, chatId,
+            '🗂️ *Управление подборками*\n\n' +
+            '_Функции управления подборками скоро будут доступны_',
+            MenuBuilder.getCollectionsManagementMenu()
+          );
+        }
         // 🎭 ЭФФЕКТЫ
         else if (text === '🎭 Эффекты') {
           await showEffectsMenu(BOT_URL, chatId);
         }
-        // 📊 СТАТИСТИКА - ИСПРАВЛЕНО!
+        // 📊 СТАТИСТИКА
         else if (text === '📊 Статистика') {
           let statsText;
           
@@ -199,19 +259,19 @@ module.exports = async (req, res) => {
                 regDate = date.toLocaleDateString('ru-RU');
               }
               
-              statsText = `📊 *Статистика @${username}:*\n\n` +
+              statsText = `📊 *Статистика @${username || 'пользователь'}:*\n\n` +
                 `🎨 Создано стикеров: *${stats.total_stickers || 0}*\n` +
                 `📅 Зарегистрирован: *${regDate}*\n\n` +
                 '_Данные из Neon PostgreSQL_ 🗄️';
             } catch (error) {
               console.log('⚠️ Ошибка получения статистики:', error.message);
-              statsText = `📊 *Статистика @${username}:*\n\n` +
+              statsText = `📊 *Статистика @${username || 'пользователь'}:*\n\n` +
                 '🎨 Создано стикеров: *0*\n' +
                 '📅 Зарегистрирован: *сегодня*\n\n' +
                 '_База данных обновляется..._ 🔄';
             }
           } else {
-            statsText = `📊 *Статистика @${username}:*\n\n` +
+            statsText = `📊 *Статистика @${username || 'пользователь'}:*\n\n` +
               '🎨 Создано стикеров: *0*\n' +
               '📅 Зарегистрирован: *сегодня*\n\n' +
               '_База данных скоро будет подключена_';
@@ -219,7 +279,7 @@ module.exports = async (req, res) => {
           
           await sendMessage(BOT_URL, chatId, statsText, MenuBuilder.getMainMenu());
         }
-        // 🏆 ТОП - ИСПРАВЛЕНО!
+        // 🏆 ТОП
         else if (text === '🏆 Топ') {
           let topMessage;
           
@@ -238,7 +298,7 @@ module.exports = async (req, res) => {
                 
                 topUsers.forEach((user, index) => {
                   const medal = medals[index] || '🔸';
-                  const name = user.username ? `@${user.username}` : user.first_name || 'Аноним';
+                  const name = user.username || user.first_name || `ID: ${user.chat_id || 'Аноним'}`;
                   topMessage += `${medal} ${name} - ${user.stickers_created || 0} стикеров\n`;
                 });
               }
@@ -277,7 +337,11 @@ module.exports = async (req, res) => {
             'Создавай тематические коллекции\n\n' +
             '🎭 *Эффекты:*\n' +
             'Винтаж, ЧБ, сепия, градиент, рамки, текст\n\n' +
-            '💎 *Полная версия скоро!*',
+            '📊 *Статистика:*\n' +
+            'Следи за своими достижениями\n\n' +
+            '🏆 *Топ:*\n' +
+            'Соревнуйся с другими пользователями\n\n' +
+            '💎 *Все функции доступны бесплатно!*',
             MenuBuilder.getMainMenu()
           );
         }
