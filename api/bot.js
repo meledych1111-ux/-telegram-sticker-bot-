@@ -26,42 +26,25 @@ try {
   console.error('❌ Ошибка загрузки библиотек:', error.message);
   process.exit(1);
 }
-
-// 3. ИМПОРТ БАЗЫ ДАННЫХ (ПОПЫТКИ ВСЕХ ВАРИАНТОВ)
+// 3. ИМПОРТ БАЗЫ ДАННЫХ - САМЫЙ ПРОСТОЙ ВАРИАНТ
 console.log('\n🔍 Импорт базы данных...');
 
-const dbPaths = [
-  '../lib/db.js',
-  '../lib/database.js',
-  '../lib/db/index.js',
-  './lib/db.js'
-];
-
-let dbLoaded = false;
-for (const dbPath of dbPaths) {
-  const fullPath = path.join(__dirname, dbPath);
-  console.log(`🔄 Пробую: ${dbPath}`);
-  
-  try {
-    // Очищаем кэш
-    delete require.cache[require.resolve(dbPath)];
-    db = require(dbPath);
-    
-    console.log(`✅ Успешно загружен: ${dbPath}`);
-    console.log(`📊 Функции:`, Object.keys(db).filter(k => typeof db[k] === 'function'));
-    
-    // Проверяем getTopUsers
-    if (typeof db.getTopUsers === 'function') {
-      console.log('✅ getTopUsers доступна');
-      dbLoaded = true;
-      break;
-    } else {
-      console.log('❌ getTopUsers не найдена');
-    }
-  } catch (err) {
-    console.log(`   ❌ ${err.message}`);
-  }
+let db;
+try {
+  db = require('../lib/database');
+  console.log('✅ База данных загружена');
+  dbLoaded = true;
+} catch (error) {
+  console.error('❌ Ошибка:', error.message);
+  dbLoaded = false;
 }
+
+// Если не загрузилась - создаем заглушку
+if (!dbLoaded || !db) {
+  console.log('⚠️ Создаю заглушку для базы данных');
+  // ... ваш код заглушки ...
+}
+
 
 // 4. СОЗДАЕМ ЗАГЛУШКУ ЕСЛИ БАЗА НЕ ЗАГРУЗИЛАСЬ
 if (!dbLoaded) {
