@@ -3,21 +3,18 @@
   "builds": [
     {
       "src": "api/bot.js",
-      "use": "@vercel/node",
-      "config": {
-        "runtime": "nodejs20.x"
-      }
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "/api/(.*)",
       "dest": "/api/bot.js"
     }
   ],
   "functions": {
     "api/bot.js": {
-      "runtime": "nodejs20.x",
+      "runtime": "nodejs24.x",
       "maxDuration": 60,
       "memory": 3008
     }
