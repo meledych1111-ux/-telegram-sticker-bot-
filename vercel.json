@@ -2,21 +2,31 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/bot.js",
+      "src": "api/**/*.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/bot",
-      "dest": "/api/bot.js",
-      "methods": ["GET", "POST", "OPTIONS"]
+      "src": "/(.*)",
+      "dest": "/api/$1"
     }
   ],
   "functions": {
-    "api/bot.js": {
-      "maxDuration": 30,
-      "memory": 1024
+    "api/**/*.js": {
+      "runtime": "nodejs24.x",  // ✅ Node.js 24 доступен!
+      "maxDuration": 60,
+      "memory": 3008,
+      "includeFiles": [
+        "fonts/**/*",
+        "images/**/*",
+        "assets/**/*",
+        "node_modules/canvas/build/Release/**/*.node"
+      ]
     }
+  },
+  "env": {
+    "NODE_ENV": "production",
+    "DATABASE_URL": "@neon_database_url"
   }
 }
