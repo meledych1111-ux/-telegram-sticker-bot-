@@ -2,21 +2,22 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/bot.js",
+      "src": "api/*.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "*.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
+      "src": "/",
+      "dest": "/index.html"
+    },
+    {
       "src": "/api/(.*)",
-      "dest": "/api/bot.js"
+      "dest": "/api/$1"
     }
-  ],
-  "functions": {
-    "api/bot.js": {
-      "runtime": "nodejs24.x",
-      "maxDuration": 60,
-      "memory": 3008
-    }
-  }
+  ]
 }
