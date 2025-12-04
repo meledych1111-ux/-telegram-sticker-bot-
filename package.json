@@ -1,12 +1,20 @@
 {
+  "name": "telegram-sticker-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for creating stickers with effects, collections and favorites",
+  "main": "api/bot.js",
   "scripts": {
-    "setup": "node setup-webhook.js",
-    "webhook:info": "node -e \"require('./setup-webhook.js').getWebhookInfo()\"",
-    "webhook:delete": "node -e \"require('./setup-webhook.js').deleteWebhook()\"",
-    "neon:test": "node -e \"require('./setup-webhook.js').testNeonConnection()\"",
-    "env:check": "node -e \"const check = (name) => console.log(name + ':', process.env[name] ? '✓' : '✗'); ['TELEGRAM_BOT_TOKEN', 'VERCEL_URL', 'DATABASE_URL', 'PGHOST_UNPOOLED'].forEach(check); console.log('\\nNeon Project:', process.env.NEON_PROJECT_ID || 'Not set')\""
+    "dev": "vercel dev",
+    "setup-webhook": "node scripts/setupWebhook.js",
+    "update-db": "node scripts/updateDatabase.js",
+    "deploy": "vercel --prod"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.0"
+    "axios": "^1.6.0",
+    "sharp": "^0.32.0",
+    "postgres": "^3.4.3"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
