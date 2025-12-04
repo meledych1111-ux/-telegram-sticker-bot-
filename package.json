@@ -1,63 +1,12 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/bot.js",
-      "use": "@vercel/node",
-      "config": {
-        "runtime": "nodejs24.x",
-        "installCommand": "npm install --legacy-peer-deps && npm rebuild canvas"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/bot.js"
-    },
-    {
-      "src": "/set-webhook",
-      "dest": "/api/bot.js",
-      "methods": ["GET"]
-    },
-    {
-      "src": "/health",
-      "dest": "/api/bot.js",
-      "methods": ["GET"]
-    },
-    {
-      "src": "/debug",
-      "dest": "/api/bot.js",
-      "methods": ["GET"]
-    }
-  ],
-  "functions": {
-    "api/bot.js": {
-      "runtime": "nodejs24.x",
-      "maxDuration": 90,
-      "memory": 3008,
-      "includeFiles": [
-        "node_modules/canvas/**/*.node",
-        "node_modules/canvas/**/*.so*",
-        "fonts/*.{ttf,otf,woff,woff2}",
-        "stickers/*.png",
-        "templates/*.{png,jpg,svg}"
-      ],
-      "supportsResponseStreaming": false
-    }
+  "scripts": {
+    "setup": "node setup-webhook.js",
+    "webhook:info": "node -e \"require('./setup-webhook.js').getWebhookInfo()\"",
+    "webhook:delete": "node -e \"require('./setup-webhook.js').deleteWebhook()\"",
+    "neon:test": "node -e \"require('./setup-webhook.js').testNeonConnection()\"",
+    "env:check": "node -e \"const check = (name) => console.log(name + ':', process.env[name] ? '✓' : '✗'); ['TELEGRAM_BOT_TOKEN', 'VERCEL_URL', 'DATABASE_URL', 'PGHOST_UNPOOLED'].forEach(check); console.log('\\nNeon Project:', process.env.NEON_PROJECT_ID || 'Not set')\""
   },
-  "env": {
-    "NODE_ENV": "production",
-    "TELEGRAM_BOT_TOKEN": "@sticker_bot_token",
-    "DATABASE_URL": "@neon_sticker_db_url",
-    "LOG_LEVEL": "info",
-    "MAX_STICKER_SIZE": "512000",
-    "ALLOWED_FORMATS": "png,jpg,jpeg,webp"
-  },
-  "crons": [
-    {
-      "path": "/api/bot?action=cleanup",
-      "schedule": "0 3 * * *"
-    }
-  ]
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.0"
+  }
 }
