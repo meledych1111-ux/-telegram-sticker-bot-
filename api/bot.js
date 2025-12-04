@@ -1,13 +1,14 @@
-// api/bot.js - ОПТИМИЗИРОВАННЫЙ ДЛЯ NODE.JS 24.x
+// api/bot.js - ПОЛНЫЙ ФАЙЛ С ПОДДЕРЖКОЙ WEBHOOK И HEALTH CHECK
 console.log('🚀 ============ ЗАГРУЗКА STICKER BOT ============');
 console.log('📦 Node.js версия:', process.version);
 console.log('📅 Время запуска:', new Date().toISOString());
 
-// Проверка поддержки Node.js 24 фич
-console.log('🔍 Проверка возможностей Node.js 24:');
-console.log('   • fetch встроен:', typeof fetch === 'function' ? '✅' : '❌');
-console.log('   • WebSocket встроен:', typeof WebSocket === 'function' ? '✅' : '❌');
-console.log('   • Permission API:', typeof process.permission?.has === 'function' ? '✅' : '❌');
+// Проверка переменных окружения
+console.log('🔍 Проверка окружения:');
+console.log('   • TELEGRAM_BOT_TOKEN:', process.env.TELEGRAM_BOT_TOKEN ? '✅' : '❌');
+console.log('   • DATABASE_URL:', process.env.DATABASE_URL ? '✅' : '❌');
+console.log('   • NODE_ENV:', process.env.NODE_ENV || 'development');
+console.log('   • VERCEL_URL:', process.env.VERCEL_URL || 'не установлен');
 
 const fs = require('fs');
 const path = require('path');
@@ -35,8 +36,8 @@ try {
   process.exit(1);
 }
 
-// 3. ИМПОРТ БАЗЫ ДАННЫХ (database.js)
-console.log('\n🔍 Импорт базы данных из lib/database.js...');
+// 3. ИМПОРТ БАЗЫ ДАННЫХ
+console.log('\n🔍 Импорт базы данных...');
 
 let database;
 let dbLoaded = false;
@@ -51,7 +52,6 @@ try {
   console.log('   • getUserStats:', typeof database.getUserStats === 'function' ? '✅' : '❌');
   console.log('   • saveUser:', typeof database.saveUser === 'function' ? '✅' : '❌');
   console.log('   • saveSticker:', typeof database.saveSticker === 'function' ? '✅' : '❌');
-  console.log('   • getBotStats:', typeof database.getBotStats === 'function' ? '✅' : '❌');
   
   // Тест подключения
   console.log('🧪 Тест подключения к БД...');
@@ -123,30 +123,106 @@ console.log('\n✅ Все библиотеки загружены\n');
 module.exports = async (req, res) => {
   // CORS заголовки
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
+  // 📍 ОБРАБОТКА СПЕЦИАЛЬНЫХ GET ЗАПРОСОВ
   if (req.method === 'GET') {
+    const url = req.url || '';
+    
+    // 🔧 /set-webhook - настройка webhook
+    if (url.includes('/set-webhook')) {
+      return await handleSetWebhook(req, res);
+    }
+    
+    // 🩺 /health - health check
+    if (url.includes('/health')) {
+      return res.status(200).json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        version: '2.0',
+        node_version: process.version,
+        database: dbLoaded ? 'connected' : 'disconnected',
+        memory: process.memoryUsage(),
+        uptime: process.uptime()
+      });
+    }
+    
+    // 🐛 /debug - отладка
+    if (url.includes('/debug')) {
+      return res.status(200).json({
+        environment: {
+          TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN ? 'set' : 'not set',
+          DATABASE_URL: process.env.DATABASE_URL ? 'set' : 'not set',
+          NODE_ENV: process.env.NODE_ENV,
+          VERCEL_URL: process.env.VERCEL_URL
+        },
+        database: {
+          loaded: dbLoaded,
+          functions: dbLoaded ? Object.keys(database).filter(k => typeof database[k] === 'function') : []
+        },
+        system: {
+          node: process.version,
+          platform: process.platform,
+          memory: process.memoryUsage(),
+          uptime: process.uptime()
+        }
+      });
+    }
+    
+    // 📊 /stats - публичная статистика
+    if (url.includes('/stats')) {
+      try {
+        const botStats = await database.getBotStats ? await database.getBotStats() : { total_users: 0, total_stickers: 0 };
+        return res.status(200).json({
+          bot_statistics: botStats,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        return res.status(200).json({
+          bot_statistics: { total_users: 0, total_stickers: 0 },
+          error: 'Database unavailable'
+        });
+      }
+    }
+    
+    // 📝 CRON задачи
+    if (url.includes('?action=cleanup')) {
+      console.log('🕒 Выполняю CRON задачу: cleanup');
+      // Здесь можно добавить логику очистки
+      return res.status(200).json({ 
+        status: 'cleanup completed',
+        timestamp: new Date().toISOString() 
+      });
+    }
+    
+    // 🏠 Главная страница
     return res.status(200).json({
-      status: '✅ Sticker Bot активен!',
+      name: 'Sticker Bot API',
       version: '2.0',
-      node_version: process.version,
-      features: ['Стикеры', 'Статистика', 'Топ'],
-      database: dbLoaded ? '✅ Neon PostgreSQL' : '⚠️ Заглушка',
-      endpoints: ['/api/bot', '/health', '/stats']
+      description: 'Telegram бот для создания стикеров',
+      endpoints: {
+        webhook: 'POST /api/bot',
+        health: 'GET /health',
+        debug: 'GET /debug',
+        stats: 'GET /stats',
+        set_webhook: 'GET /set-webhook'
+      },
+      repository: 'https://github.com/yourusername/sticker-bot'
     });
   }
 
-  // ОБРАБОТКА POST ЗАПРОСОВ ОТ TELEGRAM
+  // 📨 ОБРАБОТКА POST ЗАПРОСОВ ОТ TELEGRAM
   if (req.method === 'POST') {
     try {
       const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
       if (!TELEGRAM_BOT_TOKEN) {
-        throw new Error('TELEGRAM_BOT_TOKEN не настроен');
+        console.error('❌ TELEGRAM_BOT_TOKEN не настроен');
+        return res.status(500).json({ error: 'Bot token not configured' });
       }
       
       const update = req.body;
@@ -170,24 +246,76 @@ module.exports = async (req, res) => {
       return res.status(200).json({ ok: true });
 
     } catch (error) {
-      console.error('❌ Ошибка обработки:', error);
-      return res.status(200).json({ ok: true });
+      console.error('❌ Ошибка обработки Telegram запроса:', error);
+      return res.status(200).json({ ok: true }); // Всегда возвращаем ok для Telegram
     }
   }
 
   return res.status(404).json({ error: 'Not Found' });
 };
 
-// 7. ОСНОВНЫЕ ФУНКЦИИ ОБРАБОТКИ
+// 🔧 НАСТРОЙКА WEBHOOK
+async function handleSetWebhook(req, res) {
+  const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+  const VERCEL_URL = process.env.VERCEL_URL || req.headers.host;
+  
+  if (!TELEGRAM_BOT_TOKEN) {
+    return res.status(400).json({ error: 'TELEGRAM_BOT_TOKEN не настроен' });
+  }
+  
+  try {
+    const webhookUrl = `https://${VERCEL_URL}/api/bot`;
+    const BOT_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
+    
+    console.log(`🔧 Настройка webhook: ${webhookUrl}`);
+    
+    // Устанавливаем webhook
+    const response = await fetch(`${BOT_URL}/setWebhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: webhookUrl,
+        max_connections: 100,
+        allowed_updates: ['message', 'callback_query']
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.ok) {
+      console.log('✅ Webhook успешно установлен');
+      return res.status(200).json({
+        success: true,
+        message: 'Webhook установлен',
+        webhook_url: webhookUrl,
+        telegram_response: result
+      });
+    } else {
+      console.error('❌ Ошибка установки webhook:', result.description);
+      return res.status(500).json({
+        success: false,
+        error: result.description,
+        telegram_response: result
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Ошибка настройки webhook:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+}
 
-// ОБРАБОТКА СООБЩЕНИЙ
+// 📨 ОБРАБОТКА СООБЩЕНИЙ ОТ ПОЛЬЗОВАТЕЛЕЙ
 async function handleMessage(BOT_URL, message) {
   const chatId = message.chat.id;
   const text = message.text || '';
   const username = message.from?.username || message.from?.first_name || 'Пользователь';
   const firstName = message.from?.first_name || '';
 
-  console.log(`👤 Пользователь: ${username}, Текст: ${text}`);
+  console.log(`👤 [${chatId}] ${username}: ${text}`);
 
   // 📋 ОСНОВНЫЕ КОМАНДЫ
   switch (true) {
@@ -256,9 +384,8 @@ async function handleMessage(BOT_URL, message) {
   }
 }
 
-// СТАРТ
+// 🏠 ФУНКЦИИ ОБРАБОТКИ КОМАНД (остаются как в предыдущей версии)
 async function handleStart(BOT_URL, chatId, username, firstName) {
-  // Сохраняем пользователя
   await database.saveUser(chatId, username, firstName);
   
   await sendMessage(BOT_URL, chatId,
@@ -274,7 +401,6 @@ async function handleStart(BOT_URL, chatId, username, firstName) {
   );
 }
 
-// ГЛАВНОЕ МЕНЮ
 async function handleMainMenu(BOT_URL, chatId) {
   await sendMessage(BOT_URL, chatId,
     '🎨 *Главное меню Sticker Bot*\n\n' +
@@ -283,7 +409,6 @@ async function handleMainMenu(BOT_URL, chatId) {
   );
 }
 
-// ПОМОЩЬ
 async function handleHelp(BOT_URL, chatId) {
   await sendMessage(BOT_URL, chatId,
     '📖 *Помощь по боту*\n\n' +
@@ -310,13 +435,11 @@ async function handleHelp(BOT_URL, chatId) {
   );
 }
 
-// 🏆 ТОП ПОЛЬЗОВАТЕЛЕЙ
 async function handleTop(BOT_URL, chatId) {
   console.log(`🏆 Получение топа для ${chatId}`);
   
   let topMessage;
   try {
-    // Используем database.getTopUsers
     const topUsers = await database.getTopUsers(10);
     
     if (!topUsers || topUsers.length === 0) {
@@ -348,15 +471,10 @@ async function handleTop(BOT_URL, chatId) {
   await sendMessage(BOT_URL, chatId, topMessage, MenuBuilder.getMainMenu());
 }
 
-// 📊 СТАТИСТИКА
 async function handleStats(BOT_URL, chatId, username) {
-  console.log(`📊 Получение статистики для ${chatId}`);
-  
   try {
-    // Используем database.getUserStats
     const stats = await database.getUserStats(chatId);
     
-    // Форматируем дату регистрации
     let regDate = 'сегодня';
     if (stats.registration_date) {
       const date = new Date(stats.registration_date);
@@ -375,17 +493,13 @@ async function handleStats(BOT_URL, chatId, username) {
     await sendMessage(BOT_URL, chatId,
       '📊 *Статистика:*\n\n' +
       '🎨 Создано стикеров: *0*\n' +
-      '📅 Зарегистрирован: *сегодня*\n\n' +
-      '_База данных обновляется..._ 🔄',
+      '📅 Зарегистрирован: *сегодня*',
       MenuBuilder.getMainMenu()
     );
   }
 }
 
-// 🐛 ОТЛАДКА БАЗЫ ДАННЫХ
 async function handleDebug(BOT_URL, chatId) {
-  console.log(`🐛 Отладка базы данных для ${chatId}`);
-  
   try {
     const userStats = await database.getUserStats(chatId);
     const botStats = await database.getBotStats ? await database.getBotStats() : { total_users: 0, total_stickers: 0 };
@@ -426,7 +540,6 @@ async function handleDebug(BOT_URL, chatId) {
   }
 }
 
-// 🎨 СОЗДАНИЕ СТИКЕРА
 async function handleCreateSticker(BOT_URL, chatId) {
   await sendMessage(BOT_URL, chatId,
     '📷 *Отправьте мне изображение!*\n\n' +
@@ -439,29 +552,6 @@ async function handleCreateSticker(BOT_URL, chatId) {
   );
 }
 
-// ⭐ ИЗБРАННОЕ
-async function handleFavorites(BOT_URL, chatId) {
-  await sendMessage(BOT_URL, chatId,
-    '⭐ *Ваше избранное*\n\n' +
-    '_Функция скоро будет доступна!_\n\n' +
-    '📌 *Как добавлять:*\n' +
-    'После создания стикера нажмите кнопку "⭐ В избранное"',
-    MenuBuilder.getMainMenu()
-  );
-}
-
-// 📚 ПОДБОРКИ
-async function handleCollections(BOT_URL, chatId) {
-  await sendMessage(BOT_URL, chatId,
-    '📚 *Ваши подборки*\n\n' +
-    '_Создавайте тематические коллекции стикеров_\n\n' +
-    '📁 *Создать новую подборку:*\n' +
-    'Напишите "Создать подборку" и укажите название',
-    MenuBuilder.getMainMenu()
-  );
-}
-
-// 📸 ОБРАБОТКА ФОТО (упрощенная - сразу создает стикер)
 async function handlePhoto(BOT_URL, chatId, photos, username, firstName) {
   await sendMessage(BOT_URL, chatId, '🔄 *Скачиваю фото...*', MenuBuilder.removeMenu());
   
@@ -469,28 +559,15 @@ async function handlePhoto(BOT_URL, chatId, photos, username, firstName) {
   const fileId = bestPhoto.file_id;
   const fileUrl = await getFileUrl(BOT_URL, fileId);
   
-  // Сохраняем пользователя если ещё не сохранен
-  try {
-    await database.saveUser(chatId, username, firstName);
-    console.log(`✅ Пользователь ${username} сохранен`);
-  } catch (error) {
-    console.log('⚠️ Ошибка сохранения пользователя:', error.message);
-  }
+  await database.saveUser(chatId, username, firstName);
   
-  // Сразу создаем стикер
   await sendMessage(BOT_URL, chatId, '🎨 *Создаю стикер...*', MenuBuilder.removeMenu());
   
   try {
-    // Скачиваем изображение
     const imageBuffer = await stickerCreator.downloadImage(fileUrl);
-    
-    // Создаем стикер (без эффектов)
     const stickerBuffer = await stickerCreator.createSticker(imageBuffer);
     
-    // Отправляем стикер
     await stickerCreator.sendSticker(process.env.TELEGRAM_BOT_TOKEN, chatId, stickerBuffer);
-    
-    // Сохраняем стикер в базу (без эффекта)
     await database.saveSticker(chatId, fileId, 'none', stickerBuffer.length);
     
     const stickerId = Date.now();
@@ -511,83 +588,14 @@ async function handlePhoto(BOT_URL, chatId, photos, username, firstName) {
   }
 }
 
-// 📎 ОБРАБОТКА ДОКУМЕНТА (упрощенная - сразу создает стикер)
-async function handleDocument(BOT_URL, chatId, document, username, firstName) {
-  await sendMessage(BOT_URL, chatId, '🔄 *Загружаю изображение...*', MenuBuilder.removeMenu());
-  
-  const fileId = document.file_id;
-  const fileUrl = await getFileUrl(BOT_URL, fileId);
-  
-  // Сохраняем пользователя
-  try {
-    await database.saveUser(chatId, username, firstName);
-  } catch (error) {
-    console.log('⚠️ Ошибка сохранения пользователя:', error.message);
-  }
-  
-  // Сразу создаем стикер
-  await sendMessage(BOT_URL, chatId, '🎨 *Создаю стикер...*', MenuBuilder.removeMenu());
-  
-  try {
-    // Скачиваем изображение
-    const imageBuffer = await stickerCreator.downloadImage(fileUrl);
-    
-    // Создаем стикер (без эффектов)
-    const stickerBuffer = await stickerCreator.createSticker(imageBuffer);
-    
-    // Отправляем стикер
-    await stickerCreator.sendSticker(process.env.TELEGRAM_BOT_TOKEN, chatId, stickerBuffer);
-    
-    // Сохраняем стикер в базу (без эффекта)
-    await database.saveSticker(chatId, fileId, 'none', stickerBuffer.length);
-    
-    const stickerId = Date.now();
-    await sendMessage(BOT_URL, chatId,
-      `✅ *Стикер готов!*\n\n` +
-      '✨ *Что дальше?*',
-      MenuBuilder.getStickerActions(stickerId)
-    );
-    
-    console.log(`🎨 Создан стикер для ${username}`);
-    
-  } catch (error) {
-    console.error('❌ Ошибка создания:', error);
-    await sendMessage(BOT_URL, chatId, 
-      '❌ *Не удалось создать стикер*\nПопробуйте другое изображение!',
-      MenuBuilder.getMainMenu()
-    );
-  }
-}
-
-// 📁 СОЗДАНИЕ ПОДБОРКИ
-async function handleCreateCollection(BOT_URL, chatId, name) {
-  try {
-    await database.createCollection(chatId, name);
-    console.log(`✅ Подборка "${name}" создана в базе`);
-  } catch (error) {
-    console.log('⚠️ Ошибка создания подборки в базе:', error.message);
-  }
-  
-  await sendMessage(BOT_URL, chatId,
-    `✅ Подборка "${name}" создана!\n\n` +
-    'Теперь вы можете добавлять в неё стикеры.\n' +
-    'После создания стикера нажмите "📁 В подборку"',
-    MenuBuilder.getMainMenu()
-  );
-  
-  delete userSessions[chatId];
-}
-
-// 8. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-
-// 📤 ОТПРАВКА СООБЩЕНИЯ (используем встроенный fetch Node.js 24)
+// 🛠️ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 async function sendMessage(BOT_URL, chatId, text, options = {}) {
   try {
     const response = await fetch(`${BOT_URL}/sendMessage`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
-        'User-Agent': 'StickerBot/2.0 (Node.js 24)'
+        'User-Agent': 'StickerBot/2.0'
       },
       body: JSON.stringify({
         chat_id: chatId,
@@ -607,7 +615,6 @@ async function sendMessage(BOT_URL, chatId, text, options = {}) {
   }
 }
 
-// 🔗 ПОЛУЧЕНИЕ URL ФАЙЛА
 async function getFileUrl(BOT_URL, fileId) {
   try {
     const response = await fetch(`${BOT_URL}/getFile?file_id=${fileId}`);
@@ -623,14 +630,12 @@ async function getFileUrl(BOT_URL, fileId) {
   }
 }
 
-// 🔄 ОБРАБОТКА CALLBACK QUERY
 async function handleCallbackQuery(BOT_URL, callback) {
   const chatId = callback.message.chat.id;
   const data = callback.data;
   
   console.log(`🔄 Callback от ${chatId}: ${data}`);
   
-  // Отвечаем на callback
   await answerCallbackQuery(BOT_URL, callback.id, '✅');
   
   if (data.startsWith('fav_')) {
@@ -656,4 +661,79 @@ async function answerCallbackQuery(BOT_URL, callbackId, text = '') {
   }
 }
 
-console.log('\n✅ bot.js готов к работе! Версия Node.js:', process.version);
+async function handleFavorites(BOT_URL, chatId) {
+  await sendMessage(BOT_URL, chatId,
+    '⭐ *Ваше избранное*\n\n' +
+    '_Функция скоро будет доступна!_\n\n' +
+    '📌 *Как добавлять:*\n' +
+    'После создания стикера нажмите кнопку "⭐ В избранное"',
+    MenuBuilder.getMainMenu()
+  );
+}
+
+async function handleCollections(BOT_URL, chatId) {
+  await sendMessage(BOT_URL, chatId,
+    '📚 *Ваши подборки*\n\n' +
+    '_Создавайте тематические коллекции стикеров_\n\n' +
+    '📁 *Создать новую подборку:*\n' +
+    'Напишите "Создать подборку" и укажите название',
+    MenuBuilder.getMainMenu()
+  );
+}
+
+async function handleDocument(BOT_URL, chatId, document, username, firstName) {
+  await sendMessage(BOT_URL, chatId, '🔄 *Загружаю изображение...*', MenuBuilder.removeMenu());
+  
+  const fileId = document.file_id;
+  const fileUrl = await getFileUrl(BOT_URL, fileId);
+  
+  await database.saveUser(chatId, username, firstName);
+  
+  await sendMessage(BOT_URL, chatId, '🎨 *Создаю стикер...*', MenuBuilder.removeMenu());
+  
+  try {
+    const imageBuffer = await stickerCreator.downloadImage(fileUrl);
+    const stickerBuffer = await stickerCreator.createSticker(imageBuffer);
+    
+    await stickerCreator.sendSticker(process.env.TELEGRAM_BOT_TOKEN, chatId, stickerBuffer);
+    await database.saveSticker(chatId, fileId, 'none', stickerBuffer.length);
+    
+    const stickerId = Date.now();
+    await sendMessage(BOT_URL, chatId,
+      `✅ *Стикер готов!*\n\n` +
+      '✨ *Что дальше?*',
+      MenuBuilder.getStickerActions(stickerId)
+    );
+    
+    console.log(`🎨 Создан стикер для ${username}`);
+    
+  } catch (error) {
+    console.error('❌ Ошибка создания:', error);
+    await sendMessage(BOT_URL, chatId, 
+      '❌ *Не удалось создать стикер*\nПопробуйте другое изображение!',
+      MenuBuilder.getMainMenu()
+    );
+  }
+}
+
+async function handleCreateCollection(BOT_URL, chatId, name) {
+  try {
+    await database.createCollection(chatId, name);
+    console.log(`✅ Подборка "${name}" создана в базе`);
+  } catch (error) {
+    console.log('⚠️ Ошибка создания подборки в базе:', error.message);
+  }
+  
+  await sendMessage(BOT_URL, chatId,
+    `✅ Подборка "${name}" создана!\n\n` +
+    'Теперь вы можете добавлять в неё стикеры.\n' +
+    'После создания стикера нажмите "📁 В подборку"',
+    MenuBuilder.getMainMenu()
+  );
+  
+  delete userSessions[chatId];
+}
+
+console.log('\n✅ Sticker Bot готов к работе!');
+console.log('🔗 Webhook URL: https://' + (process.env.VERCEL_URL || 'ваш-домен.vercel.app') + '/api/bot');
+console.log('🔧 Настройка webhook: /set-webhook');
