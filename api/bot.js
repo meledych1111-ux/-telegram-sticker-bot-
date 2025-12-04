@@ -1,5 +1,13 @@
-// api/bot.js - ПОЛНЫЙ РАБОЧИЙ КОД БЕЗ ЭФФЕКТОВ
+// api/bot.js - ОПТИМИЗИРОВАННЫЙ ДЛЯ NODE.JS 24.x
 console.log('🚀 ============ ЗАГРУЗКА STICKER BOT ============');
+console.log('📦 Node.js версия:', process.version);
+console.log('📅 Время запуска:', new Date().toISOString());
+
+// Проверка поддержки Node.js 24 фич
+console.log('🔍 Проверка возможностей Node.js 24:');
+console.log('   • fetch встроен:', typeof fetch === 'function' ? '✅' : '❌');
+console.log('   • WebSocket встроен:', typeof WebSocket === 'function' ? '✅' : '❌');
+console.log('   • Permission API:', typeof process.permission?.has === 'function' ? '✅' : '❌');
 
 const fs = require('fs');
 const path = require('path');
@@ -126,6 +134,7 @@ module.exports = async (req, res) => {
     return res.status(200).json({
       status: '✅ Sticker Bot активен!',
       version: '2.0',
+      node_version: process.version,
       features: ['Стикеры', 'Статистика', 'Топ'],
       database: dbLoaded ? '✅ Neon PostgreSQL' : '⚠️ Заглушка',
       endpoints: ['/api/bot', '/health', '/stats']
@@ -571,11 +580,15 @@ async function handleCreateCollection(BOT_URL, chatId, name) {
 
 // 8. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 
+// 📤 ОТПРАВКА СООБЩЕНИЯ (используем встроенный fetch Node.js 24)
 async function sendMessage(BOT_URL, chatId, text, options = {}) {
   try {
-    await fetch(`${BOT_URL}/sendMessage`, {
+    const response = await fetch(`${BOT_URL}/sendMessage`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'User-Agent': 'StickerBot/2.0 (Node.js 24)'
+      },
       body: JSON.stringify({
         chat_id: chatId,
         text: text,
@@ -584,15 +597,25 @@ async function sendMessage(BOT_URL, chatId, text, options = {}) {
         ...options
       })
     });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Ошибка отправки сообщения (${response.status}):`, errorText);
+    }
   } catch (error) {
     console.error('❌ Ошибка отправки сообщения:', error.message);
   }
 }
 
+// 🔗 ПОЛУЧЕНИЕ URL ФАЙЛА
 async function getFileUrl(BOT_URL, fileId) {
   try {
     const response = await fetch(`${BOT_URL}/getFile?file_id=${fileId}`);
     const data = await response.json();
+    if (!data.ok) {
+      console.error('❌ Ошибка получения файла:', data.description);
+      return null;
+    }
     return `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${data.result.file_path}`;
   } catch (error) {
     console.error('❌ Ошибка получения файла:', error);
@@ -633,4 +656,4 @@ async function answerCallbackQuery(BOT_URL, callbackId, text = '') {
   }
 }
 
-console.log('\n✅ bot.js готов к работе!');
+console.log('\n✅ bot.js готов к работе! Версия Node.js:', process.version);
