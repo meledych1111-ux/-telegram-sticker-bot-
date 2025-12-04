@@ -1,26 +1,54 @@
 {
-  "name": "telegram-sticker-bot",
-  "version": "1.0.0",
-  "description": "Telegram бот для создания стикеров с эффектами",
-  "main": "api/bot.js",
-  "scripts": {
-    "start": "node api/bot.js",
-    "dev": "node api/bot.js"
-  },
-  "dependencies": {
-    "@neondatabase/serverless": "^0.9.0",
-    "canvas": "^2.11.2"
-  },
-  "engines": {
-    "node": "24.x"
-  },
-  "keywords": [
-    "telegram",
-    "bot",
-    "sticker",
-    "vercel",
-    "neon"
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/bot.js",
+      "use": "@vercel/node",
+      "config": {
+        "runtime": "nodejs24.x",
+        "installCommand": "npm install --legacy-peer-deps && npm rebuild canvas"
+      }
+    }
   ],
-  "author": "Your Name",
-  "license": "MIT"
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/bot.js"
+    },
+    {
+      "src": "/set-webhook",
+      "dest": "/api/bot.js",
+      "methods": ["GET"]
+    }
+  ],
+  "functions": {
+    "api/bot.js": {
+      "runtime": "nodejs24.x",
+      "maxDuration": 90,
+      "memory": 3008,
+      "includeFiles": [
+        "node_modules/canvas/**/*.node",
+        "node_modules/canvas/**/*.so*",
+        "fonts/*.{ttf,otf,woff,woff2}",
+        "stickers/*.png",
+        "templates/*.{png,jpg,svg}"
+      ],
+      "supportsResponseStreaming": false
+    }
+  },
+  "env": {
+    "TELEGRAM_BOT_TOKEN": "@sticker_bot_token",
+    "ADMIN_IDS": "@admin_ids",
+    "DATABASE_URL": "@neon_sticker_db_url",
+    "REDIS_URL": "@redis_url",
+    "LOG_LEVEL": "info",
+    "MAX_STICKER_SIZE": "512000",
+    "ALLOWED_FORMATS": "png,jpg,jpeg,webp"
+  },
+  "crons": [
+    {
+      "path": "/api/bot?action=cleanup",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }
