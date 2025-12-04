@@ -1,25 +1,26 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/bot.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/bot",
-      "dest": "/api/bot.js",
-      "methods": ["GET", "POST", "OPTIONS"]
-    }
-  ],
-  "functions": {
-    "api/bot.js": {
-      "maxDuration": 30,
-      "memory": 1024
-    }
+  "name": "telegram-sticker-bot",
+  "version": "1.0.0",
+  "description": "Telegram бот для создания стикеров с эффектами",
+  "main": "api/bot.js",
+  "scripts": {
+    "start": "node api/bot.js",
+    "dev": "node api/bot.js"
   },
-  "env": {
-    "NODE_ENV": "production"
-  }
+  "dependencies": {
+    "@neondatabase/serverless": "^0.9.0",
+    "canvas": "^2.11.2"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "sticker",
+    "vercel",
+    "neon"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }
